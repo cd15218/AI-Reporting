@@ -6,4 +6,3 @@ openpyxl
 python-docx
 python-pptx
 reportlab
-openai
