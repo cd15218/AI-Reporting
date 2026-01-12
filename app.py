@@ -21,16 +21,9 @@ def load_file_to_df(uploaded_file) -> pd.DataFrame:
 
 def basic_clean(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
-
-    # Remove completely empty columns
     df = df.dropna(axis=1, how="all")
-
-    # Remove duplicate rows
     df = df.drop_duplicates()
-
-    # Strip whitespace from column names
     df.columns = [str(c).strip() for c in df.columns]
-
     return df
 
 with st.sidebar:
@@ -63,9 +56,23 @@ st.dataframe(df.head(max_preview_rows), use_container_width=True)
 
 summary, visuals = build_visuals(df, report_type)
 
+# ---------- HORIZONTAL SUMMARY UI ----------
 st.subheader("Dataset summary")
-st.write(summary)
 
+col1, col2, col3, col4 = st.columns(4)
+
+col1.metric("Rows", summary["rows"])
+col2.metric("Columns", summary["columns"])
+col3.metric("Numeric columns", len(summary["numeric_columns"]))
+col4.metric("Categorical columns", len(summary["categorical_columns"]))
+
+with st.expander("View column details"):
+    st.write("Numeric columns")
+    st.write(summary["numeric_columns"])
+    st.write("Categorical columns")
+    st.write(summary["categorical_columns"])
+
+# ---------- CHARTS ----------
 st.subheader("Charts")
 if visuals:
     for chart_type, fig in visuals:
@@ -73,6 +80,7 @@ if visuals:
 else:
     st.info("No charts available. Try a dataset with at least one numeric column.")
 
+# ---------- EXPORT ----------
 st.subheader("Export for GraphMaker.ai")
 st.write("Download your cleaned CSV and upload it to GraphMaker.ai for the most visually polished charts.")
 
@@ -83,5 +91,3 @@ st.download_button(
     file_name="report_data.csv",
     mime="text/csv",
 )
-
-st.caption("Tip: If your file is large, start with a smaller sample to confirm columns and chart behavior.")
