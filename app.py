@@ -1,6 +1,6 @@
-# app.py
 import streamlit as st
 import pandas as pd
+import base64
 from report_ai import build_visuals
 
 st.set_page_config(page_title="AI Reporting", layout="wide")
@@ -32,12 +32,123 @@ def get_fig(visuals, key: str):
             return fig
     return None
 
+def image_file_to_base64(uploaded_image) -> str:
+    if uploaded_image is None:
+        return ""
+    data = uploaded_image.getvalue()
+    return base64.b64encode(data).decode("utf-8")
+
+def apply_background_css(mode: str, solid_hex: str, gradient_css: str, image_b64: str, image_mime: str):
+    # Content panel styling keeps charts readable even on busy backgrounds
+    panel_css = """
+    .block-container {
+        background: rgba(255, 255, 255, 0.78);
+        border-radius: 18px;
+        padding: 1.2rem 1.2rem;
+        backdrop-filter: blur(6px);
+    }
+    """
+
+    if mode == "Solid":
+        bg_css = f"background: {solid_hex} !important;"
+    elif mode == "Gradient":
+        bg_css = f"background: {gradient_css} !important;"
+    else:
+        # Image mode
+        if not image_b64:
+            bg_css = "background: #0f172a !important;"
+        else:
+            bg_css = f"""
+            background-image: url("data:{image_mime};base64,{image_b64}") !important;
+            background-size: cover !important;
+            background-position: center !important;
+            background-repeat: no-repeat !important;
+            """
+
+    st.markdown(
+        f"""
+        <style>
+        html, body, [data-testid="stAppViewContainer"] {{
+            {bg_css}
+        }}
+        [data-testid="stAppViewContainer"] > .main {{
+            {bg_css}
+        }}
+        {panel_css}
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+# ---------------- SIDEBAR: BACKGROUND CONTROLS ----------------
+with st.sidebar:
+    st.header("Appearance")
+
+    bg_mode = st.selectbox(
+        "Background type",
+        ["Solid", "Gradient", "Image"],
+        index=1
+    )
+
+    solid_palettes = {
+        "Slate": "#0f172a",
+        "Midnight": "#0b1020",
+        "Soft Gray": "#f3f4f6",
+        "Warm Cream": "#fbf7ef",
+        "Forest": "#0b3d2e",
+        "Ocean": "#0b3a5b",
+        "Plum": "#2a1033",
+    }
+
+    gradient_presets = {
+        "Midnight Blue": "linear-gradient(135deg, #0b1020 0%, #123055 55%, #0b1020 100%)",
+        "Deep Ocean": "linear-gradient(135deg, #06202b 0%, #0b3a5b 55%, #06202b 100%)",
+        "Purple Night": "linear-gradient(135deg, #120b2a 0%, #3b1a66 55%, #120b2a 100%)",
+        "Forest Fade": "linear-gradient(135deg, #061a14 0%, #0b3d2e 55%, #061a14 100%)",
+        "Light Studio": "linear-gradient(135deg, #ffffff 0%, #f3f4f6 60%, #ffffff 100%)",
+    }
+
+    solid_choice = None
+    custom_solid = None
+    gradient_choice = None
+    img_upload = None
+
+    if bg_mode == "Solid":
+        solid_choice = st.selectbox("Solid palette", list(solid_palettes.keys()), index=0)
+        custom_solid = st.text_input("Optional custom hex", value="", placeholder="#112233")
+
+    if bg_mode == "Gradient":
+        gradient_choice = st.selectbox("Gradient preset", list(gradient_presets.keys()), index=0)
+
+    if bg_mode == "Image":
+        img_upload = st.file_uploader("Upload background image", type=["png", "jpg", "jpeg", "webp"])
+        st.caption("Tip: large images look best. The content panel stays readable.")
+
+# Resolve background settings
+solid_hex = "#0f172a"
+if bg_mode == "Solid":
+    solid_hex = solid_palettes.get(solid_choice or "Slate", "#0f172a")
+    if custom_solid and custom_solid.strip().startswith("#") and len(custom_solid.strip()) in (4, 7):
+        solid_hex = custom_solid.strip()
+
+gradient_css = gradient_presets.get(gradient_choice or "Midnight Blue", gradient_presets["Midnight Blue"])
+
+image_b64 = ""
+image_mime = "image/png"
+if bg_mode == "Image" and img_upload is not None:
+    image_b64 = image_file_to_base64(img_upload)
+    image_mime = img_upload.type or "image/png"
+
+apply_background_css(bg_mode, solid_hex, gradient_css, image_b64, image_mime)
+
+# ---------------- SIDEBAR: APP INPUTS ----------------
 with st.sidebar:
     st.header("Inputs")
 
     uploaded_file = st.file_uploader(
         "Upload CSV or Excel",
-        type=["csv", "xlsx", "xls"]
+        type=["csv", "xlsx", "xls"],
+        key="data_upload"
     )
 
     report_type = st.selectbox(
@@ -263,7 +374,6 @@ with st.expander("Radial category chart (donut)", expanded=radial_ready):
     with controls:
         st.selectbox("Category column", options=["None"] + categorical_cols, key="radial_col")
 
-        # Only show category picker once a column is selected
         selected_col = st.session_state["radial_col"]
         category_options = []
         if selected_col != "None":
@@ -321,7 +431,6 @@ with st.expander("Radial category chart (donut)", expanded=radial_ready):
 
 st.divider()
 
-# ---------------- EXPORT ----------------
 st.subheader("Export")
 st.write("Download your cleaned dataset for use in GraphMaker.ai or other visualization tools.")
 
