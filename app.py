@@ -1,3 +1,4 @@
+# app.py
 import streamlit as st
 import pandas as pd
 from report_ai import build_visuals
@@ -68,7 +69,7 @@ st.dataframe(df.head(max_preview_rows), use_container_width=True)
 
 st.divider()
 
-# ---------------- KEY STATISTICS (always visible) ----------------
+# ---------------- KEY STATISTICS ----------------
 st.subheader("Key statistics")
 
 left, right = st.columns([1, 2])
@@ -87,6 +88,10 @@ user_choices = {
     "category_volume": None,
     "category_a": None,
     "category_b": None,
+    "radial_category_col": None,
+    "radial_categories": [],
+    "radial_mode": "count",
+    "radial_value_col": None,
 }
 
 summary, visuals_kpi, numeric_df, categorical_df = build_visuals(
@@ -123,7 +128,6 @@ with st.expander("Numeric statistics table"):
 with st.expander("Categorical statistics table"):
     st.dataframe(categorical_df, use_container_width=True)
 
-# KPI linked numeric distribution
 if summary["primary_numeric_column"]:
     with st.expander("Numeric distribution chart", expanded=True):
         fig = get_fig(visuals_kpi, "numeric_distribution")
@@ -135,17 +139,24 @@ st.divider()
 # ---------------- ACCORDION STYLE CHART SECTIONS ----------------
 st.subheader("Visualizations")
 
-# Keep selection state so accordion behavior feels consistent
-if "scatter_x" not in st.session_state:
-    st.session_state["scatter_x"] = "None"
-if "scatter_y" not in st.session_state:
-    st.session_state["scatter_y"] = "None"
-if "cat_volume_col" not in st.session_state:
-    st.session_state["cat_volume_col"] = "None"
-if "cat_a" not in st.session_state:
-    st.session_state["cat_a"] = "None"
-if "cat_b" not in st.session_state:
-    st.session_state["cat_b"] = "None"
+# Session state defaults
+for key, default in [
+    ("scatter_x", "None"),
+    ("scatter_y", "None"),
+    ("cat_volume_col", "None"),
+    ("cat_a", "None"),
+    ("cat_b", "None"),
+    ("radial_col", "None"),
+]:
+    if key not in st.session_state:
+        st.session_state[key] = default
+
+if "radial_mode" not in st.session_state:
+    st.session_state["radial_mode"] = "Count"
+if "radial_value_col" not in st.session_state:
+    st.session_state["radial_value_col"] = "None"
+if "radial_pick" not in st.session_state:
+    st.session_state["radial_pick"] = []
 
 scatter_ready = (
     st.session_state["scatter_x"] != "None"
@@ -158,21 +169,14 @@ heatmap_ready = (
     and st.session_state["cat_b"] != "None"
     and st.session_state["cat_a"] != st.session_state["cat_b"]
 )
+radial_ready = st.session_state["radial_col"] != "None"
 
 with st.expander("Numeric comparison scatter", expanded=scatter_ready):
     controls, chart = st.columns([1, 2])
 
     with controls:
-        st.selectbox(
-            "X axis (numeric)",
-            options=["None"] + numeric_cols,
-            key="scatter_x"
-        )
-        st.selectbox(
-            "Y axis (numeric)",
-            options=["None"] + numeric_cols,
-            key="scatter_y"
-        )
+        st.selectbox("X axis (numeric)", options=["None"] + numeric_cols, key="scatter_x")
+        st.selectbox("Y axis (numeric)", options=["None"] + numeric_cols, key="scatter_y")
 
     user_choices = {
         "primary_numeric": None,
@@ -181,14 +185,13 @@ with st.expander("Numeric comparison scatter", expanded=scatter_ready):
         "category_volume": None,
         "category_a": None,
         "category_b": None,
+        "radial_category_col": None,
+        "radial_categories": [],
+        "radial_mode": "count",
+        "radial_value_col": None,
     }
 
-    _, visuals_scatter, _, _ = build_visuals(
-        df=df,
-        report_type=report_type,
-        user_choices=user_choices,
-        max_categories=max_categories
-    )
+    _, visuals_scatter, _, _ = build_visuals(df, report_type, user_choices, max_categories)
 
     with chart:
         fig = get_fig(visuals_scatter, "numeric_scatter")
@@ -201,11 +204,7 @@ with st.expander("Categorical volume chart", expanded=cat_volume_ready):
     controls, chart = st.columns([1, 2])
 
     with controls:
-        st.selectbox(
-            "Category column",
-            options=["None"] + categorical_cols,
-            key="cat_volume_col"
-        )
+        st.selectbox("Category column", options=["None"] + categorical_cols, key="cat_volume_col")
 
     user_choices = {
         "primary_numeric": None,
@@ -214,14 +213,13 @@ with st.expander("Categorical volume chart", expanded=cat_volume_ready):
         "category_volume": None if st.session_state["cat_volume_col"] == "None" else st.session_state["cat_volume_col"],
         "category_a": None,
         "category_b": None,
+        "radial_category_col": None,
+        "radial_categories": [],
+        "radial_mode": "count",
+        "radial_value_col": None,
     }
 
-    _, visuals_cat_vol, _, _ = build_visuals(
-        df=df,
-        report_type=report_type,
-        user_choices=user_choices,
-        max_categories=max_categories
-    )
+    _, visuals_cat_vol, _, _ = build_visuals(df, report_type, user_choices, max_categories)
 
     with chart:
         fig = get_fig(visuals_cat_vol, "category_volume")
@@ -234,16 +232,8 @@ with st.expander("Categorical comparison heatmap", expanded=heatmap_ready):
     controls, chart = st.columns([1, 2])
 
     with controls:
-        st.selectbox(
-            "Category A",
-            options=["None"] + categorical_cols,
-            key="cat_a"
-        )
-        st.selectbox(
-            "Category B",
-            options=["None"] + categorical_cols,
-            key="cat_b"
-        )
+        st.selectbox("Category A", options=["None"] + categorical_cols, key="cat_a")
+        st.selectbox("Category B", options=["None"] + categorical_cols, key="cat_b")
 
     user_choices = {
         "primary_numeric": None,
@@ -252,14 +242,13 @@ with st.expander("Categorical comparison heatmap", expanded=heatmap_ready):
         "category_volume": None,
         "category_a": None if st.session_state["cat_a"] == "None" else st.session_state["cat_a"],
         "category_b": None if st.session_state["cat_b"] == "None" else st.session_state["cat_b"],
+        "radial_category_col": None,
+        "radial_categories": [],
+        "radial_mode": "count",
+        "radial_value_col": None,
     }
 
-    _, visuals_heatmap, _, _ = build_visuals(
-        df=df,
-        report_type=report_type,
-        user_choices=user_choices,
-        max_categories=max_categories
-    )
+    _, visuals_heatmap, _, _ = build_visuals(df, report_type, user_choices, max_categories)
 
     with chart:
         fig = get_fig(visuals_heatmap, "category_heatmap")
@@ -267,6 +256,68 @@ with st.expander("Categorical comparison heatmap", expanded=heatmap_ready):
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("Select two different categorical columns to generate a comparison heatmap.")
+
+with st.expander("Radial category chart (donut)", expanded=radial_ready):
+    controls, chart = st.columns([1, 2])
+
+    with controls:
+        st.selectbox("Category column", options=["None"] + categorical_cols, key="radial_col")
+
+        # Only show category picker once a column is selected
+        selected_col = st.session_state["radial_col"]
+        category_options = []
+        if selected_col != "None":
+            category_options = (
+                df[selected_col].astype("string").fillna("Missing").value_counts().head(max_categories).index.tolist()
+            )
+
+        st.multiselect(
+            "Include categories (optional)",
+            options=category_options,
+            default=st.session_state["radial_pick"] if st.session_state["radial_pick"] else [],
+            key="radial_pick"
+        )
+
+        st.selectbox(
+            "Value type",
+            options=["Count", "Sum of numeric column"],
+            key="radial_mode"
+        )
+
+        if st.session_state["radial_mode"] == "Sum of numeric column":
+            st.selectbox(
+                "Numeric column to sum",
+                options=["None"] + numeric_cols,
+                key="radial_value_col"
+            )
+        else:
+            st.session_state["radial_value_col"] = "None"
+
+    radial_mode = "sum" if st.session_state["radial_mode"] == "Sum of numeric column" else "count"
+    radial_value_col = None if st.session_state["radial_value_col"] == "None" else st.session_state["radial_value_col"]
+
+    user_choices = {
+        "primary_numeric": None,
+        "scatter_x": None,
+        "scatter_y": None,
+        "category_volume": None,
+        "category_a": None,
+        "category_b": None,
+        "radial_category_col": None if st.session_state["radial_col"] == "None" else st.session_state["radial_col"],
+        "radial_categories": st.session_state["radial_pick"],
+        "radial_mode": radial_mode,
+        "radial_value_col": radial_value_col,
+    }
+
+    _, visuals_radial, _, _ = build_visuals(df, report_type, user_choices, max_categories)
+
+    with chart:
+        fig = get_fig(visuals_radial, "radial_donut")
+        if fig is not None:
+            st.plotly_chart(fig, use_container_width=True)
+            st.caption("Colors are different shades of one base color for a cohesive look.")
+        else:
+            st.info("Select a categorical column to generate the radial chart.")
 
 st.divider()
 
