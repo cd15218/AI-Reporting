@@ -30,16 +30,19 @@ def read_df(uploaded_file) -> pd.DataFrame:
     df.columns = [str(c).strip() for c in df.columns]
     return df
 
+
 def b64_image(uploaded_image) -> tuple[str, str]:
     if not uploaded_image:
         return "", "image/png"
     return base64.b64encode(uploaded_image.getvalue()).decode("utf-8"), uploaded_image.type
+
 
 def hex_to_rgb(h: str) -> tuple[int, int, int]:
     h = h.lstrip("#")
     if len(h) == 3:
         h = "".join([c * 2 for c in h])
     return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+
 
 def rel_lum(rgb: tuple[int, int, int]) -> float:
     def ch(c):
@@ -48,17 +51,20 @@ def rel_lum(rgb: tuple[int, int, int]) -> float:
     r, g, b = rgb
     return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b)
 
+
 def is_dark(hex_color: str) -> bool:
     try:
         return rel_lum(hex_to_rgb(hex_color)) < 0.40
     except Exception:
         return True
 
+
 def is_dark_grad(a: str, b: str) -> bool:
     try:
         return ((rel_lum(hex_to_rgb(a)) + rel_lum(hex_to_rgb(b))) / 2.0) < 0.40
     except Exception:
         return True
+
 
 def mix(a: tuple[int, int, int], b: tuple[int, int, int], t: float) -> tuple[int, int, int]:
     return (
@@ -67,9 +73,11 @@ def mix(a: tuple[int, int, int], b: tuple[int, int, int], t: float) -> tuple[int
         int(a[2] + (b[2] - a[2]) * t),
     )
 
+
 def rgb_to_hex(rgb: tuple[int, int, int]) -> str:
     r, g, b = rgb
     return f"#{r:02x}{g:02x}{b:02x}"
+
 
 def shades(base_hex: str, n: int, dark_mode: bool) -> list[str]:
     try:
@@ -84,6 +92,7 @@ def shades(base_hex: str, n: int, dark_mode: bool) -> list[str]:
         rgbs = [mix((250, 250, 250), base, t) for t in ts]
     return [rgb_to_hex(x) for x in rgbs]
 
+
 def colorscale(sh: list[str]) -> list[tuple[float, str]]:
     if not sh:
         return [(0.0, "#93c5fd"), (1.0, "#1d4ed8")]
@@ -92,11 +101,13 @@ def colorscale(sh: list[str]) -> list[tuple[float, str]]:
     steps = len(sh) - 1
     return [(i / steps, c) for i, c in enumerate(sh)]
 
+
 def get_fig(visuals, name: str):
     for k, fig in visuals:
         if k == name:
             return fig
     return None
+
 
 def safe_len(x) -> int:
     if x is None:
@@ -108,6 +119,7 @@ def safe_len(x) -> int:
             return len(list(x))
         except Exception:
             return 0
+
 
 def enforce_y_axis_horizontal(fig):
     if fig is None:
@@ -127,6 +139,7 @@ def enforce_y_axis_horizontal(fig):
     except Exception:
         pass
     return fig
+
 
 def force_theme(fig, theme: dict):
     fig.update_layout(
@@ -221,6 +234,7 @@ def force_theme(fig, theme: dict):
 
     return fig
 
+
 def compute_numeric_stats(df: pd.DataFrame, col: str) -> dict:
     s = pd.to_numeric(df[col], errors="coerce").dropna()
     if s.empty:
@@ -233,6 +247,7 @@ def compute_numeric_stats(df: pd.DataFrame, col: str) -> dict:
         "max": float(s.max()),
     }
 
+
 def load_png_data_uri(path: str) -> str | None:
     try:
         if os.path.exists(path):
@@ -242,6 +257,7 @@ def load_png_data_uri(path: str) -> str | None:
     except Exception:
         return None
     return None
+
 
 # ---------------------------
 # Palettes
@@ -270,13 +286,15 @@ SOLID_PALETTES = {
     "Blush": "#fff1f2",
 }
 
+
 def _sync_solid_picker():
     choice = st.session_state.get("solid_choice", None)
     if choice and choice in SOLID_PALETTES:
         st.session_state["solid_picker"] = SOLID_PALETTES[choice]
 
+
 # ---------------------------
-# Sticky dropdown selection
+# Sticky dropdown selection everywhere
 # ---------------------------
 
 def inject_dropdown_scroll_to_selected():
@@ -284,37 +302,46 @@ def inject_dropdown_scroll_to_selected():
         """
         <script>
         (function() {
-          if (window.__dropdownStickyApplied) return;
-          window.__dropdownStickyApplied = true;
+          if (window.__dropdownStickyAppliedV2) return;
+          window.__dropdownStickyAppliedV2 = true;
 
-          function findMenus() {
-            return Array.from(document.querySelectorAll('div[data-baseweb="menu"]'));
-          }
+          function selectedNode(menuEl) {
+            if (!menuEl) return null;
 
-          function scrollSelected(menuEl) {
-            if (!menuEl) return;
-            const selected =
+            // Most common
+            let sel =
               menuEl.querySelector('[role="option"][aria-selected="true"]') ||
               menuEl.querySelector('[role="option"][data-selected="true"]') ||
               menuEl.querySelector('[role="option"][aria-checked="true"]');
-            if (selected && selected.scrollIntoView) {
-              selected.scrollIntoView({ block: "center" });
+
+            // Fallback: any element marked selected
+            if (!sel) sel = menuEl.querySelector('[aria-selected="true"]') || menuEl.querySelector('[aria-checked="true"]');
+
+            return sel;
+          }
+
+          function scrollSelected(menuEl) {
+            const sel = selectedNode(menuEl);
+            if (sel && sel.scrollIntoView) {
+              sel.scrollIntoView({ block: "center" });
             }
           }
 
           function scrollAllMenus() {
-            const menus = findMenus();
-            for (const m of menus) scrollSelected(m);
+            const menus = document.querySelectorAll('div[data-baseweb="menu"]');
+            menus.forEach(scrollSelected);
           }
 
           function scheduleScroll() {
+            // several frames to catch slow renders / portals
             setTimeout(scrollAllMenus, 0);
-            setTimeout(scrollAllMenus, 60);
-            setTimeout(scrollAllMenus, 180);
+            setTimeout(scrollAllMenus, 40);
+            setTimeout(scrollAllMenus, 120);
+            setTimeout(scrollAllMenus, 260);
           }
 
-          // When a menu is added to the DOM (common case)
-          const obs = new MutationObserver((mutations) => {
+          // 1) menus added to DOM
+          const addObs = new MutationObserver((mutations) => {
             let sawMenu = false;
             for (const m of mutations) {
               for (const node of m.addedNodes || []) {
@@ -326,12 +353,28 @@ def inject_dropdown_scroll_to_selected():
             }
             if (sawMenu) scheduleScroll();
           });
-          obs.observe(document.body, { childList: true, subtree: true });
+          addObs.observe(document.body, { childList: true, subtree: true });
 
-          // Also catch the portal case where the menu exists but opens via aria-expanded
-          document.addEventListener("click", (e) => {
-            const btn = e.target?.closest?.('div[data-baseweb="select"]');
-            if (btn) scheduleScroll();
+          // 2) menus already exist but "open" by attribute/style changes
+          const attrObs = new MutationObserver((mutations) => {
+            for (const m of mutations) {
+              const t = m.target;
+              if (!(t instanceof HTMLElement)) continue;
+              if (t.matches?.('div[data-baseweb="menu"]')) {
+                // If it becomes visible, schedule
+                const style = window.getComputedStyle(t);
+                if (style && style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0") {
+                  scheduleScroll();
+                }
+              }
+            }
+          });
+          attrObs.observe(document.body, { attributes: true, subtree: true, attributeFilter: ["style", "aria-hidden", "class"] });
+
+          // 3) click/keyboard opening
+          document.addEventListener("pointerdown", (e) => {
+            const sel = e.target?.closest?.('div[data-baseweb="select"]');
+            if (sel) scheduleScroll();
           }, true);
 
           document.addEventListener("keydown", (e) => {
@@ -349,6 +392,26 @@ def inject_dropdown_scroll_to_selected():
         height=0,
         width=0,
     )
+
+
+# ---------------------------
+# Auto scroll to Key Statistics on upload
+# ---------------------------
+
+def scroll_to_key_stats_once():
+    components.html(
+        """
+        <script>
+        (function(){
+          const el = document.getElementById("key-stats-anchor");
+          if (el) el.scrollIntoView({behavior:"smooth", block:"start"});
+        })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
 
 # ---------------------------
 # CSS
@@ -524,6 +587,7 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, sidebar_icon_ur
         unsafe_allow_html=True,
     )
 
+
 # ---------------------------
 # Defaults
 # ---------------------------
@@ -541,6 +605,11 @@ if "grad_b" not in st.session_state:
 if "grad_angle" not in st.session_state:
     st.session_state["grad_angle"] = 135
 
+if "last_uploaded_name" not in st.session_state:
+    st.session_state["last_uploaded_name"] = None
+if "scroll_to_key_stats" not in st.session_state:
+    st.session_state["scroll_to_key_stats"] = False
+
 # ---------------------------
 # Sidebar: ONLY Page Appearance
 # ---------------------------
@@ -550,7 +619,6 @@ with st.sidebar:
     st.selectbox("Background Type", ["Solid", "Gradient", "Image"], index=1, key="bg_mode")
 
     if st.session_state["bg_mode"] == "Solid":
-        st.color_picker("Solid Color", value=st.session_state.get("solid_picker", "#0f172a"), key="solid_picker")
         st.selectbox(
             "Solid Palette",
             list(SOLID_PALETTES.keys()),
@@ -560,6 +628,7 @@ with st.sidebar:
             key="solid_choice",
             on_change=_sync_solid_picker,
         )
+        st.color_picker("Solid Color", value=st.session_state.get("solid_picker", "#0f172a"), key="solid_picker")
 
     elif st.session_state["bg_mode"] == "Gradient":
         st.caption("Real gradient background.")
@@ -664,7 +733,7 @@ st.markdown("Upload a CSV or Excel file to generate key statistics and charts.")
 st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------------------------
-# Upload + filters + preview
+# Upload + filters + preview (removed report type)
 # ---------------------------
 
 left_upload, _ = st.columns([2, 6], vertical_alignment="top")
@@ -673,15 +742,7 @@ with left_upload:
     file_top = st.file_uploader("Upload Dataset", type=["csv", "xlsx", "xls"], key="data_upload_top")
 
     st.markdown("<div class='filters-tight'>", unsafe_allow_html=True)
-    r1, r2, r3 = st.columns([1.7, 1.1, 1.1], vertical_alignment="center")
-
-    with r1:
-        report_type = st.selectbox(
-            "Report Type",
-            ["Overview", "Trends", "Quality Check", "Executive Summary"],
-            index=0,
-            key="report_type_main",
-        )
+    r2, r3 = st.columns([1.1, 1.1], vertical_alignment="center")
 
     with r2:
         max_categories = st.slider("Max Categories", 5, 50, 20, key="max_categories_main")
@@ -705,6 +766,12 @@ if file_top is None:
     st.info("Upload a dataset to begin.")
     st.stop()
 
+# Detect new upload and enable one-time scroll
+current_name = getattr(file_top, "name", None)
+if current_name and current_name != st.session_state.get("last_uploaded_name"):
+    st.session_state["last_uploaded_name"] = current_name
+    st.session_state["scroll_to_key_stats"] = True
+
 try:
     df = read_df(file_top)
 except Exception as e:
@@ -716,6 +783,17 @@ if preview_dialog is not None and preview_clicked:
 
 numeric_cols = df.select_dtypes(include="number").columns.tolist()
 categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
+
+# Extra spacing between filters and Key Statistics
+st.markdown("<div style='height: 1.25rem;'></div>", unsafe_allow_html=True)
+
+# Anchor for auto scroll
+st.markdown("<div id='key-stats-anchor'></div>", unsafe_allow_html=True)
+
+# Trigger one-time scroll after upload
+if st.session_state.get("scroll_to_key_stats"):
+    scroll_to_key_stats_once()
+    st.session_state["scroll_to_key_stats"] = False
 
 # ---------------------------
 # Key Statistics
@@ -739,7 +817,7 @@ with kpi_left:
 
 summary, visuals_kpi, numeric_df, categorical_df = build_visuals(
     df=df,
-    report_type=st.session_state.get("report_type_main", "Overview"),
+    report_type="Overview",
     user_choices={
         "primary_numeric": primary_numeric,
         "scatter_x": None,
@@ -810,7 +888,7 @@ with rad_chart:
         radial_mode = "sum" if radial_mode_label == "Sum of Numeric Column" else "count"
         _, visuals_radial_kpi, _, _ = build_visuals(
             df=df,
-            report_type=st.session_state.get("report_type_main", "Overview"),
+            report_type="Overview",
             user_choices={
                 "primary_numeric": primary_numeric,
                 "scatter_x": None,
@@ -874,7 +952,7 @@ with tabs[2]:
 
     _, visuals, _, _ = build_visuals(
         df,
-        st.session_state.get("report_type_main", "Overview"),
+        "Overview",
         {
             "primary_numeric": None,
             "scatter_x": scatter_x,
@@ -914,7 +992,7 @@ with tabs[3]:
 
     _, visuals, _, _ = build_visuals(
         df,
-        st.session_state.get("report_type_main", "Overview"),
+        "Overview",
         {
             "primary_numeric": None,
             "scatter_x": None,
@@ -957,7 +1035,7 @@ with tabs[4]:
 
     _, visuals, _, _ = build_visuals(
         df,
-        st.session_state.get("report_type_main", "Overview"),
+        "Overview",
         {
             "primary_numeric": None,
             "scatter_x": None,
