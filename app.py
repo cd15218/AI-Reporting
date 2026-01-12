@@ -1,38 +1,87 @@
+# app.py
 import streamlit as st
 import pandas as pd
-from charts import generate_charts
-from report_ai import generate_report
-from export import export_pdf, export_docx
+from report_ai import build_visuals
 
-st.set_page_config(page_title="AI Report Generator", layout="wide")
+st.set_page_config(page_title="AI Reporting", layout="wide")
 
-st.title("📊 AI Reporting Tool")
+st.title("AI Reporting")
+st.write("Upload a CSV or Excel file to generate quick visuals, then export a clean CSV for GraphMaker.ai.")
 
-uploaded_file = st.file_uploader("Upload Excel or CSV", type=["csv", "xlsx"])
+def load_file_to_df(uploaded_file) -> pd.DataFrame:
+    name = uploaded_file.name.lower()
 
-if uploaded_file:
-    df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith("csv") else pd.read_excel(uploaded_file)
+    if name.endswith(".csv"):
+        return pd.read_csv(uploaded_file)
 
-    st.subheader("Data Preview")
-    st.dataframe(df.head())
+    if name.endswith(".xlsx") or name.endswith(".xls"):
+        return pd.read_excel(uploaded_file)
+
+    raise ValueError("Unsupported file type. Please upload a CSV or Excel file.")
+
+def basic_clean(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+
+    # Remove completely empty columns
+    df = df.dropna(axis=1, how="all")
+
+    # Remove duplicate rows
+    df = df.drop_duplicates()
+
+    # Strip whitespace from column names
+    df.columns = [str(c).strip() for c in df.columns]
+
+    return df
+
+with st.sidebar:
+    st.header("Inputs")
+    uploaded_file = st.file_uploader("Upload CSV or Excel", type=["csv", "xlsx", "xls"])
 
     report_type = st.selectbox(
-        "Select Report Type",
-        ["Sales", "Marketing", "Operations", "Finance"]
+        "Report type",
+        ["Overview", "Trends", "Quality Check", "Executive Summary"],
+        index=0
     )
 
-    if st.button("Generate Report"):
-        charts = generate_charts(df)
-        report_text = generate_report(df, report_type)
+    max_preview_rows = st.slider("Preview rows", 5, 100, 25)
 
-        st.subheader("Executive Summary")
-        st.write(report_text)
+if not uploaded_file:
+    st.info("Upload a file to get started.")
+    st.stop()
 
-        for fig in charts:
-            st.plotly_chart(fig, use_container_width=True)
+try:
+    df = load_file_to_df(uploaded_file)
+except Exception as e:
+    st.error(f"Could not read the file. {e}")
+    st.stop()
 
-        if st.button("Download PDF"):
-            export_pdf(report_text, charts)
+df = basic_clean(df)
 
-        if st.button("Download DOCX"):
-            export_docx(report_text, charts)
+st.subheader("Data preview")
+st.write(f"Rows: {df.shape[0]}, Columns: {df.shape[1]}")
+st.dataframe(df.head(max_preview_rows), use_container_width=True)
+
+summary, visuals = build_visuals(df, report_type)
+
+st.subheader("Dataset summary")
+st.write(summary)
+
+st.subheader("Charts")
+if visuals:
+    for chart_type, fig in visuals:
+        st.plotly_chart(fig, use_container_width=True)
+else:
+    st.info("No charts available. Try a dataset with at least one numeric column.")
+
+st.subheader("Export for GraphMaker.ai")
+st.write("Download your cleaned CSV and upload it to GraphMaker.ai for the most visually polished charts.")
+
+csv_bytes = df.to_csv(index=False).encode("utf-8")
+st.download_button(
+    label="Download CSV",
+    data=csv_bytes,
+    file_name="report_data.csv",
+    mime="text/csv",
+)
+
+st.caption("Tip: If your file is large, start with a smaller sample to confirm columns and chart behavior.")
