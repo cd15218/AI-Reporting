@@ -279,48 +279,46 @@ def apply_plotly_theme(fig, theme: dict):
 # ---------------- SIDEBAR ----------------
 
 with st.sidebar:
-    st.header("Appearance")
+    with st.expander("Appearance", expanded=False):
+        bg_mode = st.selectbox("Background Type", ["Solid", "Gradient", "Image"], index=1)
 
-    bg_mode = st.selectbox("Background Type", ["Solid", "Gradient", "Image"], index=1)
+        solid_palettes = {
+            "Slate": "#0f172a",
+            "Midnight": "#0b1020",
+            "Soft Gray": "#f3f4f6",
+            "Warm Cream": "#fbf7ef",
+            "Forest": "#0b3d2e",
+            "Ocean": "#0b3a5b",
+            "Plum": "#2a1033",
+        }
 
-    solid_palettes = {
-        "Slate": "#0f172a",
-        "Midnight": "#0b1020",
-        "Soft Gray": "#f3f4f6",
-        "Warm Cream": "#fbf7ef",
-        "Forest": "#0b3d2e",
-        "Ocean": "#0b3a5b",
-        "Plum": "#2a1033",
-    }
+        solid_choice = None
+        custom_solid = ""
+        img_upload = None
 
-    solid_choice = None
-    custom_solid = ""
-    img_upload = None
+        gradient_color_a = "#0b1020"
+        gradient_color_b = "#123055"
+        gradient_angle = 135
 
-    gradient_color_a = "#0b1020"
-    gradient_color_b = "#123055"
-    gradient_angle = 135
+        if bg_mode == "Solid":
+            solid_choice = st.selectbox("Solid Palette", list(solid_palettes.keys()), index=0, key="solid_palette")
+            custom_solid = st.text_input("Optional Custom Hex", value="", placeholder="#112233", key="custom_hex")
 
-    if bg_mode == "Solid":
-        solid_choice = st.selectbox("Solid Palette", list(solid_palettes.keys()), index=0, key="solid_palette")
-        custom_solid = st.text_input("Optional Custom Hex", value="", placeholder="#112233", key="custom_hex")
+        if bg_mode == "Gradient":
+            st.caption("Build a real gradient background.")
+            gradient_color_a = st.color_picker("Gradient Color A", value="#0b1020", key="grad_a")
+            gradient_color_b = st.color_picker("Gradient Color B", value="#123055", key="grad_b")
+            gradient_angle = st.slider("Gradient Angle", 0, 360, 135, key="grad_angle")
 
-    if bg_mode == "Gradient":
-        st.caption("Build a real gradient background.")
-        gradient_color_a = st.color_picker("Gradient Color A", value="#0b1020", key="grad_a")
-        gradient_color_b = st.color_picker("Gradient Color B", value="#123055", key="grad_b")
-        gradient_angle = st.slider("Gradient Angle", 0, 360, 135, key="grad_angle")
+        if bg_mode == "Image":
+            img_upload = st.file_uploader("Upload Background Image", type=["png", "jpg", "jpeg", "webp"], key="bg_image")
 
-    if bg_mode == "Image":
-        img_upload = st.file_uploader("Upload Background Image", type=["png", "jpg", "jpeg", "webp"], key="bg_image")
-
-    st.divider()
     st.header("Inputs")
 
-    uploaded_file = st.file_uploader(
+    uploaded_file_sidebar = st.file_uploader(
         "Upload CSV or Excel",
         type=["csv", "xlsx", "xls"],
-        key="data_upload"
+        key="data_upload_sidebar"
     )
 
     report_type = st.selectbox(
@@ -332,6 +330,25 @@ with st.sidebar:
 
     max_preview_rows = st.slider("Preview Rows", 5, 100, 25, key="preview_rows")
     max_categories = st.slider("Max Categories Per Chart", 5, 50, 20, key="max_categories")
+
+# If appearance expander is collapsed on first load, ensure defaults exist
+if "bg_mode" not in locals():
+    bg_mode = "Gradient"
+    solid_palettes = {
+        "Slate": "#0f172a",
+        "Midnight": "#0b1020",
+        "Soft Gray": "#f3f4f6",
+        "Warm Cream": "#fbf7ef",
+        "Forest": "#0b3d2e",
+        "Ocean": "#0b3a5b",
+        "Plum": "#2a1033",
+    }
+    solid_choice = "Slate"
+    custom_solid = ""
+    img_upload = None
+    gradient_color_a = "#0b1020"
+    gradient_color_b = "#123055"
+    gradient_angle = 135
 
 # ---------------- APPLY THEME ----------------
 
@@ -357,10 +374,24 @@ plotly_template, theme = apply_background_and_theme_css(
 )
 pio.templates.default = plotly_template
 
-# ---------------- MAIN CONTENT ----------------
+# ---------------- TITLE + TOP UPLOAD ----------------
 
-st.title("Dataset Reporting")
-st.write("Upload a CSV or Excel file to generate key statistics and visualizations.")
+title_left, title_right = st.columns([3, 2], vertical_alignment="center")
+
+with title_left:
+    st.markdown("# Dataset Reporting")
+    st.write("Upload a CSV or Excel file to generate key statistics and visualizations.")
+
+with title_right:
+    uploaded_file_top = st.file_uploader(
+        "Upload Dataset",
+        type=["csv", "xlsx", "xls"],
+        key="data_upload_top",
+        help="You can upload here or in the sidebar. The most recent upload will be used."
+    )
+
+# Choose the file to use (top upload has priority if provided)
+uploaded_file = uploaded_file_top if uploaded_file_top is not None else uploaded_file_sidebar
 
 if not uploaded_file:
     st.info("Upload a dataset to begin.")
