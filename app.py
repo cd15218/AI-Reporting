@@ -437,31 +437,6 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, sidebar_icon_ur
     st.markdown(
         f"""
         <style>
-        /* ===============================
-        FORCE WIDGET LABEL READABILITY
-        =============================== */
-
-        label[data-testid="stWidgetLabel"] p,
-        label[data-testid="stWidgetLabel"] span,
-        label[data-testid="stWidgetLabel"] div {{
-            color: {label_color} !important;
-            -webkit-text-fill-color: {label_color} !important;
-            opacity: 1 !important;
-        }}
-
-        div[data-baseweb="select"] > div *,
-        section[data-testid="stSidebar"] div[data-baseweb="select"] > div * {{
-            color: {select_value_color} !important;
-            -webkit-text-fill-color: {select_value_color} !important;
-            opacity: 1 !important;
-        }}
-
-        div[data-baseweb="popover"] div[data-baseweb="menu"] *,
-        section[data-testid="stSidebar"] div[data-baseweb="popover"] div[data-baseweb="menu"] * {{
-            color: {menu_text_color} !important;
-            -webkit-text-fill-color: {menu_text_color} !important;
-            opacity: 1 !important;
-        }}
         header[data-testid="stHeader"] {{ background: transparent !important; }}
         [data-testid="stDeployButton"], [data-testid="stStatusWidget"], [data-testid="stToolbarActions"] {{ display:none !important; }}
 
@@ -628,6 +603,31 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, sidebar_icon_ur
         }}
 
         {icon_css}
+          /* ===============================
+        FORCE WIDGET LABEL READABILITY
+        =============================== */
+
+        label[data-testid="stWidgetLabel"] p,
+        label[data-testid="stWidgetLabel"] span,
+        label[data-testid="stWidgetLabel"] div {{
+            color: {label_color} !important;
+            -webkit-text-fill-color: {label_color} !important;
+            opacity: 1 !important;
+        }}
+
+        div[data-baseweb="select"] > div *,
+        section[data-testid="stSidebar"] div[data-baseweb="select"] > div * {{
+            color: {select_value_color} !important;
+            -webkit-text-fill-color: {select_value_color} !important;
+            opacity: 1 !important;
+        }}
+
+        div[data-baseweb="popover"] div[data-baseweb="menu"] *,
+        section[data-testid="stSidebar"] div[data-baseweb="popover"] div[data-baseweb="menu"] * {{
+            color: {menu_text_color} !important;
+            -webkit-text-fill-color: {menu_text_color} !important;
+            opacity: 1 !important;
+        }}
         </style>
         """,
         unsafe_allow_html=True,
