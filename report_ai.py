@@ -15,27 +15,27 @@ def is_text_like(series: pd.Series) -> bool:
     avg_len = s.str.len().mean()
     return avg_len is not None and avg_len >= 30
 
-def safe_float(x):
+def safe_number(x):
     try:
         if pd.isna(x):
             return None
-        return float(x)
+        x = float(x)
+        # format a bit for Streamlit metric display
+        if abs(x) >= 1000:
+            return f"{x:,.2f}"
+        return f"{x:.2f}"
     except Exception:
         return None
 
 def numeric_stats(df: pd.DataFrame, numeric_cols: list[str]) -> pd.DataFrame:
     if not numeric_cols:
-        return pd.DataFrame(columns=["metric"] + numeric_cols)
+        return pd.DataFrame()
 
     desc = df[numeric_cols].describe(percentiles=[0.25, 0.5, 0.75]).T
     desc = desc.rename(columns={"50%": "median"})
-
-    # Keep only the most useful columns for a report
     keep = ["count", "mean", "std", "min", "25%", "median", "75%", "max"]
     keep = [c for c in keep if c in desc.columns]
-    desc = desc[keep]
-
-    desc = desc.reset_index().rename(columns={"index": "column"})
+    desc = desc[keep].reset_index().rename(columns={"index": "column"})
     return desc
 
 def categorical_stats(df: pd.DataFrame, cat_cols: list[str], top_n: int = 5) -> pd.DataFrame:
@@ -96,8 +96,10 @@ def column_quality_summary(df: pd.DataFrame) -> pd.DataFrame:
 def categorical_volume_chart(df: pd.DataFrame, col: str, max_categories: int):
     s = df[col].astype("string").fillna("Missing")
     vc = s.value_counts().head(max_categories)
+
     vc_df = vc.reset_index()
     vc_df.columns = [col, "count"]
+
     fig = px.bar(vc_df, x=col, y="count", title=f"Category volume: {col}")
     return fig
 
@@ -122,40 +124,46 @@ def text_length_chart(df: pd.DataFrame, col: str):
     fig = px.histogram(temp, x="length", title=f"Text length distribution: {col}")
     return fig
 
-def build_report_summary(df: pd.DataFrame, numeric_cols: list[str], cat_cols: list[str]):
+def pick_primary_numeric(numeric_cols: list[str], user_choice: str | None, instructions: str):
+    if user_choice and user_choice in numeric_cols:
+        return user_choice
+
+    lowered = (instructions or "").lower()
+    for c in numeric_cols:
+        if c.lower() in lowered:
+            return c
+
+    return numeric_cols[0] if numeric_cols else None
+
+def pick_primary_category(cat_cols: list[str], user_choice: str | None, instructions: str):
+    if user_choice and user_choice in cat_cols:
+        return user_choice
+
+    lowered = (instructions or "").lower()
+    for c in cat_cols:
+        if c.lower() in lowered:
+            return c
+
+    return cat_cols[0] if cat_cols else None
+
+def build_report_summary(df: pd.DataFrame, numeric_cols: list[str], cat_cols: list[str], primary_numeric: str | None, primary_cat: str | None):
     summary = {}
 
-    if numeric_cols:
-        # Use the first numeric column for headline KPIs
-        primary = numeric_cols[0]
-        series = df[primary]
-
-        summary["primary_numeric_column"] = primary
-        summary["primary_mean"] = safe_float(series.mean())
-        summary["primary_median"] = safe_float(series.median())
-        summary["primary_min"] = safe_float(series.min())
-        summary["primary_max"] = safe_float(series.max())
-
-        # Optional second numeric column KPI if available
-        if len(numeric_cols) >= 2:
-            secondary = numeric_cols[1]
-            s2 = df[secondary]
-            summary["secondary_numeric_column"] = secondary
-            summary["secondary_mean"] = safe_float(s2.mean())
-        else:
-            summary["secondary_numeric_column"] = None
-            summary["secondary_mean"] = None
+    if primary_numeric:
+        series = df[primary_numeric]
+        summary["primary_numeric_column"] = primary_numeric
+        summary["primary_mean"] = safe_number(series.mean())
+        summary["primary_median"] = safe_number(series.median())
+        summary["primary_min"] = safe_number(series.min())
+        summary["primary_max"] = safe_number(series.max())
     else:
         summary["primary_numeric_column"] = None
         summary["primary_mean"] = None
         summary["primary_median"] = None
         summary["primary_min"] = None
         summary["primary_max"] = None
-        summary["secondary_numeric_column"] = None
-        summary["secondary_mean"] = None
 
-    if cat_cols:
-        primary_cat = cat_cols[0]
+    if primary_cat:
         s = df[primary_cat].astype("string").fillna("Missing")
         vc = s.value_counts()
         top_label = str(vc.index[0]) if not vc.empty else None
@@ -169,16 +177,20 @@ def build_report_summary(df: pd.DataFrame, numeric_cols: list[str], cat_cols: li
         summary["top_category_label"] = None
         summary["top_category_count"] = None
 
-    total_missing = int(df.isna().sum().sum())
-    summary["total_missing_cells"] = total_missing
-
+    summary["total_missing_cells"] = int(df.isna().sum().sum())
     return summary
 
-def build_visuals(df: pd.DataFrame, report_type: str, max_categories: int = 20):
+def build_visuals(
+    df: pd.DataFrame,
+    report_type: str,
+    instructions: str,
+    user_choices: dict,
+    max_categories: int = 20
+):
     numeric_cols = pick_numeric_columns(df)
     non_numeric_cols_all = pick_non_numeric_columns(df)
 
-    # Separate true categorical from long text
+    # Split categorical vs text like
     cat_cols = []
     text_like_cols = []
     for col in non_numeric_cols_all:
@@ -191,44 +203,54 @@ def build_visuals(df: pd.DataFrame, report_type: str, max_categories: int = 20):
     numeric_df = numeric_stats(df, numeric_cols)
     categorical_df = categorical_stats(df, cat_cols, top_n=5)
 
-    report_summary = build_report_summary(df, numeric_cols, cat_cols)
+    primary_numeric = pick_primary_numeric(numeric_cols, user_choices.get("primary_numeric"), instructions)
+    primary_cat = pick_primary_category(cat_cols, user_choices.get("category_volume_col"), instructions)
+
+    report_summary = build_report_summary(df, numeric_cols, cat_cols, primary_numeric, primary_cat)
 
     visuals = []
 
-    # Missing values by column
+    # Missing values chart
     if quality_df["missing"].sum() > 0:
         miss = quality_df.sort_values("missing", ascending=False).head(25)
         fig = px.bar(miss, x="column", y="missing", title="Missing values by column")
         visuals.append(("missing_values", fig))
 
-    # Numeric visuals
-    if numeric_cols:
-        primary = numeric_cols[0]
-        fig = px.histogram(df, x=primary, title=f"Distribution of {primary}")
+    # Numeric compare charts based on user choices
+    x_num = user_choices.get("compare_numeric_x")
+    y_num = user_choices.get("compare_numeric_y")
+
+    if primary_numeric:
+        fig = px.histogram(df, x=primary_numeric, title=f"Distribution of {primary_numeric}")
         visuals.append(("numeric_distribution", fig))
 
-        if len(numeric_cols) >= 2:
-            xcol = numeric_cols[0]
-            ycol = numeric_cols[1]
-            fig = px.scatter(df, x=xcol, y=ycol, title=f"{ycol} vs {xcol}")
-            visuals.append(("numeric_scatter", fig))
+    if x_num and y_num and x_num in numeric_cols and y_num in numeric_cols and x_num != y_num:
+        fig = px.scatter(df, x=x_num, y=y_num, title=f"{y_num} vs {x_num}")
+        visuals.append(("numeric_comparison_scatter", fig))
 
-    # Categorical volume charts
-    for col in cat_cols[:3]:
-        fig = categorical_volume_chart(df, col, max_categories=max_categories)
-        visuals.append((f"category_volume_{col}", fig))
+    # Category volume chart based on your chosen or inferred column
+    if primary_cat:
+        fig = categorical_volume_chart(df, primary_cat, max_categories=max_categories)
+        visuals.append((f"category_volume_{primary_cat}", fig))
+    else:
+        # Fallback: show up to 2 category volume charts automatically
+        for col in cat_cols[:2]:
+            fig = categorical_volume_chart(df, col, max_categories=max_categories)
+            visuals.append((f"category_volume_{col}", fig))
 
-    # Categorical relationship heatmap
-    if len(cat_cols) >= 2:
-        fig = categorical_relationship_heatmap(
-            df,
-            cat_cols[0],
-            cat_cols[1],
-            max_categories=min(max_categories, 15),
-        )
+    # Category vs category comparison if you selected two
+    a = user_choices.get("compare_category_a")
+    b = user_choices.get("compare_category_b")
+
+    if a and b and a in cat_cols and b in cat_cols and a != b:
+        fig = categorical_relationship_heatmap(df, a, b, max_categories=min(max_categories, 15))
+        visuals.append(("category_relationship_heatmap", fig))
+    elif len(cat_cols) >= 2:
+        # Fallback heatmap
+        fig = categorical_relationship_heatmap(df, cat_cols[0], cat_cols[1], max_categories=min(max_categories, 15))
         visuals.append(("category_relationship_heatmap", fig))
 
-    # Text length distribution if you have text like columns
+    # Text length chart if text columns exist
     if text_like_cols:
         fig = text_length_chart(df, text_like_cols[0])
         visuals.append((f"text_length_{text_like_cols[0]}", fig))
