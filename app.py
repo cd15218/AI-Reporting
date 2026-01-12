@@ -110,26 +110,25 @@ def safe_len(x) -> int:
 
 def enforce_y_axis_horizontal(fig):
     """
-    Force all Y-axis tick labels horizontal (tickangle=0) without touching X-axis.
-    Applies to yaxis, yaxis2, yaxis3, etc.
+    Forces all y-axis tick labels to be horizontal (tickangle=0) without touching x-axis.
+    Applies to yaxis, yaxis2, yaxis3... and also enables automargin so labels do not clip.
     """
     if fig is None:
         return fig
+
     try:
-        # Primary y-axis for most charts
-        fig.update_yaxes(tickangle=0)
+        fig.update_yaxes(tickangle=0, automargin=True)
     except Exception:
         pass
 
-    # Multi-axis cases: yaxis2, yaxis3...
     try:
+        layout_updates = {}
         if hasattr(fig, "layout") and fig.layout:
             for k in list(fig.layout.keys()):
                 if isinstance(k, str) and k.startswith("yaxis"):
-                    try:
-                        fig.layout[k].update(tickangle=0)
-                    except Exception:
-                        pass
+                    layout_updates[k] = dict(tickangle=0, automargin=True)
+        if layout_updates:
+            fig.update_layout(**layout_updates)
     except Exception:
         pass
 
@@ -148,16 +147,18 @@ def force_theme(fig, theme: dict):
     )
 
     try:
-        # Do NOT set tickangle for x-axis here (leave it alone)
+        # Leave x-axis rotation alone
         fig.update_xaxes(
             tickfont=dict(color=theme["text"]),
             title_font=dict(color=theme["text"]),
             gridcolor=theme["border"],
+            automargin=True,
         )
         fig.update_yaxes(
             tickfont=dict(color=theme["text"]),
             title_font=dict(color=theme["text"]),
             gridcolor=theme["border"],
+            automargin=True,
         )
     except Exception:
         pass
@@ -227,7 +228,7 @@ def force_theme(fig, theme: dict):
 
     return fig
 
-def apply_css(bg_css: str, dark: bool, palette: dict, text: str, muted: str):
+def apply_css(bg_css: str, palette: dict, text: str, muted: str):
     st.markdown(
         f"""
         <style>
@@ -269,7 +270,6 @@ def apply_css(bg_css: str, dark: bool, palette: dict, text: str, muted: str):
             border: 1px solid {palette["border"]} !important;
             color: {palette["widget_text"]} !important;
         }}
-
         div[data-baseweb="select"] span {{
             color: {palette["widget_text"]} !important;
         }}
@@ -283,7 +283,6 @@ def apply_css(bg_css: str, dark: bool, palette: dict, text: str, muted: str):
         div[data-baseweb="popover"] div[data-baseweb="menu"] * {{
             color: {palette["menu_text"]} !important;
         }}
-
         div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"]:hover {{
             background: {palette["hover_bg"]} !important;
         }}
@@ -373,67 +372,82 @@ for name, hx in SOLID_PALETTES.items():
     hx_norm = str(hx).strip().lower()
     if hx_norm not in _unique_hex_to_name:
         _unique_hex_to_name[hx_norm] = name
-
 SOLID_PALETTE_OPTIONS = [_unique_hex_to_name[hx] for hx in _unique_hex_to_name]
 
 # ---------------------------
-# Sidebar
+# Page title at the true top
+# ---------------------------
+
+st.markdown("# Dataset Reporting")
+
+# ---------------------------
+# Sidebar (keep only uploader so sidebar still shows on load)
 # ---------------------------
 
 with st.sidebar:
-    with st.expander("Appearance", expanded=False):
-        bg_mode = st.selectbox("Background Type", ["Solid", "Gradient", "Image"], index=1)
+    st.header("Dataset")
+    file_sidebar = st.file_uploader("Upload CSV or Excel", type=["csv", "xlsx", "xls"], key="data_upload_sidebar")
+
+# ---------------------------
+# Top-of-page Appearance (with paint icon)
+# ---------------------------
+
+top_left, top_right = st.columns([2, 3], vertical_alignment="top")
+with top_left:
+    st.write("Upload a CSV or Excel file to generate key statistics and charts.")
+
+with top_right:
+    with st.expander("🎨 Appearance", expanded=False):
+        bg_mode = st.selectbox("Background Type", ["Solid", "Gradient", "Image"], index=1, key="bg_mode_top")
 
         solid_choice = SOLID_PALETTE_OPTIONS[0] if SOLID_PALETTE_OPTIONS else "Slate"
         solid_picker = "#0f172a"
 
         img_upload = None
-
         grad_a = "#0b1020"
         grad_b = "#123055"
         grad_angle = 135
 
         if bg_mode == "Solid":
-            solid_choice = st.selectbox("Solid Palette", SOLID_PALETTE_OPTIONS, index=0)
-            solid_picker = st.color_picker("Solid Color Picker", value=SOLID_PALETTES.get(solid_choice, "#0f172a"))
+            solid_choice = st.selectbox("Solid Palette", SOLID_PALETTE_OPTIONS, index=0, key="solid_choice_top")
+            solid_picker = st.color_picker(
+                "Solid Color Picker",
+                value=SOLID_PALETTES.get(solid_choice, "#0f172a"),
+                key="solid_picker_top",
+            )
 
         if bg_mode == "Gradient":
             st.caption("Real gradient background.")
-            grad_a = st.color_picker("Gradient Color A", value=grad_a)
-            grad_b = st.color_picker("Gradient Color B", value=grad_b)
-            grad_angle = st.slider("Gradient Angle", 0, 360, grad_angle)
+            grad_a = st.color_picker("Gradient Color A", value=grad_a, key="grad_a_top")
+            grad_b = st.color_picker("Gradient Color B", value=grad_b, key="grad_b_top")
+            grad_angle = st.slider("Gradient Angle", 0, 360, grad_angle, key="grad_angle_top")
 
         if bg_mode == "Image":
-            img_upload = st.file_uploader("Upload Background Image", type=["png", "jpg", "jpeg", "webp"])
-
-    st.header("Inputs")
-    file_sidebar = st.file_uploader("Upload CSV or Excel", type=["csv", "xlsx", "xls"], key="data_upload_sidebar")
-    report_type = st.selectbox("Report Type", ["Overview", "Trends", "Quality Check", "Executive Summary"], index=0)
-    max_preview_rows = st.slider("Preview Rows", 5, 100, 25)
-    max_categories = st.slider("Max Categories Per Chart", 5, 50, 20)
+            img_upload = st.file_uploader(
+                "Upload Background Image",
+                type=["png", "jpg", "jpeg", "webp"],
+                key="bg_image_top",
+            )
 
 # ---------------------------
 # Theme construction
 # ---------------------------
 
-if bg_mode == "Solid":
-    solid_hex = solid_picker
-else:
-    solid_hex = SOLID_PALETTES.get(solid_choice, "#0f172a")
-
-grad_css = f"linear-gradient({grad_angle}deg, {grad_a} 0%, {grad_b} 100%)"
-grad_dark = is_dark_grad(grad_a, grad_b)
-
 img_b64, img_mime = b64_image(img_upload)
 
 if bg_mode == "Solid":
+    solid_hex = solid_picker
     dark = is_dark(solid_hex)
     bg_css = f"background: {solid_hex} !important;"
     accent = solid_hex
+
 elif bg_mode == "Gradient":
+    grad_dark = is_dark_grad(grad_a, grad_b)
     dark = grad_dark
+    grad_css = f"linear-gradient({grad_angle}deg, {grad_a} 0%, {grad_b} 100%)"
     bg_css = f"background-image: {grad_css} !important; background-attachment: fixed !important;"
     accent = grad_b
+
 else:
     dark = True
     if img_b64:
@@ -474,7 +488,8 @@ palette = {
     "button_hover_bg": button_hover_bg,
     "button_text": button_text,
 }
-apply_css(bg_css, dark, palette, page_text, page_muted)
+
+apply_css(bg_css, palette, page_text, page_muted)
 
 plotly_template = "plotly_dark" if dark else "plotly_white"
 pio.templates.default = plotly_template
@@ -492,15 +507,11 @@ theme = {
 }
 
 # ---------------------------
-# Title and upload + preview button under uploader
+# Title section upload (keep) + preview button under uploader
 # ---------------------------
 
-left, right = st.columns([3, 2], vertical_alignment="center")
-with left:
-    st.markdown("# Dataset Reporting")
-    st.write("Upload a CSV or Excel file to generate key statistics and charts.")
-
-with right:
+title_left, title_right = st.columns([3, 2], vertical_alignment="center")
+with title_right:
     file_top = st.file_uploader("Upload Dataset", type=["csv", "xlsx", "xls"], key="data_upload_top")
     preview_clicked = False
 
@@ -526,39 +537,56 @@ except Exception as e:
     st.error(f"Could not read the file. {e}")
     st.stop()
 
-try:
-    if file_top is not None and preview_clicked:
-        preview_dialog(df, max_preview_rows)
-except Exception:
-    pass
-
 numeric_cols = df.select_dtypes(include="number").columns.tolist()
 categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
 
-ensure("scatter_x", numeric_cols[0] if len(numeric_cols) >= 1 else "None")
-ensure("scatter_y", numeric_cols[1] if len(numeric_cols) >= 2 else "None")
-ensure("cat_volume_col", categorical_cols[0] if len(categorical_cols) >= 1 else "None")
-ensure("cat_a", categorical_cols[0] if len(categorical_cols) >= 1 else "None")
-ensure("cat_b", categorical_cols[1] if len(categorical_cols) >= 2 else "None")
-ensure("radial_pick", [])
-ensure("kpi_radial_col", categorical_cols[0] if len(categorical_cols) >= 1 else "None")
-ensure("kpi_radial_mode", "Count")
+# Preview dialog after upload
+try:
+    if file_top is not None and preview_clicked:
+        # Default preview rows will come from controls below; if not set yet, use 25
+        rows = int(st.session_state.get("max_preview_rows_main", 25))
+        preview_dialog(df, rows)
+except Exception:
+    pass
 
 # ---------------------------
-# Key Statistics (with radial chart included)
+# Key Statistics (filters moved here)
 # ---------------------------
 
 st.subheader("Key Statistics")
 
-kpi_left, kpi_right = st.columns([1, 3])
-with kpi_left:
-    default_idx = 1 if len(numeric_cols) > 0 else 0
-    primary_numeric = st.selectbox(
-        "Primary Numeric Column (KPIs)",
-        options=["None"] + numeric_cols,
-        index=default_idx,
-        key="kpi_primary_numeric",
+filters_row_1, filters_row_2 = st.columns([2, 2])
+with filters_row_1:
+    report_type = st.selectbox(
+        "Report Type",
+        ["Overview", "Trends", "Quality Check", "Executive Summary"],
+        index=0,
+        key="report_type_main",
     )
+with filters_row_2:
+    max_categories = st.slider(
+        "Max Categories Per Chart",
+        5,
+        50,
+        20,
+        key="max_categories_main",
+    )
+
+max_preview_rows = st.slider(
+    "Preview Rows",
+    5,
+    100,
+    25,
+    key="max_preview_rows_main",
+)
+
+default_idx = 1 if len(numeric_cols) > 0 else 0
+primary_numeric = st.selectbox(
+    "Primary Numeric Column (KPIs)",
+    options=["None"] + numeric_cols,
+    index=default_idx,
+    key="kpi_primary_numeric",
+)
 
 summary, visuals_kpi, numeric_df, categorical_df = build_visuals(
     df=df,
@@ -578,31 +606,33 @@ summary, visuals_kpi, numeric_df, categorical_df = build_visuals(
     max_categories=max_categories,
 )
 
-with kpi_right:
-    c1, c2, c3, c4, c5 = st.columns(5)
+# KPIs
+kpi_cols = st.columns(5)
+if primary_numeric != "None":
+    stats = compute_numeric_stats(df, primary_numeric)
+    kpi_cols[0].metric(f"Total {primary_numeric}", stats["sum"])
+    kpi_cols[1].metric(f"Average {primary_numeric}", stats["mean"])
+    kpi_cols[2].metric(f"Median {primary_numeric}", stats["median"])
+    kpi_cols[3].metric(f"Minimum {primary_numeric}", stats["min"])
+    kpi_cols[4].metric(f"Maximum {primary_numeric}", stats["max"])
+else:
+    kpi_cols[0].metric("Total", "N/A")
+    kpi_cols[1].metric("Average", "N/A")
+    kpi_cols[2].metric("Median", "N/A")
+    kpi_cols[3].metric("Minimum", "N/A")
+    kpi_cols[4].metric("Maximum", "N/A")
 
-    if primary_numeric != "None":
-        stats = compute_numeric_stats(df, primary_numeric)
-        c1.metric(f"Total {primary_numeric}", stats["sum"])
-        c2.metric(f"Average {primary_numeric}", stats["mean"])
-        c3.metric(f"Median {primary_numeric}", stats["median"])
-        c4.metric(f"Minimum {primary_numeric}", stats["min"])
-        c5.metric(f"Maximum {primary_numeric}", stats["max"])
-    else:
-        c1.metric("Total", "N/A")
-        c2.metric("Average", "N/A")
-        c3.metric("Median", "N/A")
-        c4.metric("Minimum", "N/A")
-        c5.metric("Maximum", "N/A")
+meta_cols = st.columns(4)
+meta_cols[0].metric("Total Rows", int(df.shape[0]))
+meta_cols[1].metric("Numeric Columns", int(len(numeric_cols)))
+meta_cols[2].metric("Categorical Columns", int(len(categorical_cols)))
+meta_cols[3].metric("Missing Cells", int(df.isna().sum().sum()))
 
-    r1, r2, r3, r4 = st.columns(4)
-    r1.metric("Total Rows", int(df.shape[0]))
-    r2.metric("Numeric Columns", int(len(numeric_cols)))
-    r3.metric("Categorical Columns", int(len(categorical_cols)))
-    r4.metric("Missing Cells", int(df.isna().sum().sum()))
+# ---------------------------
+# Radial chart (still part of Key Statistics)
+# ---------------------------
 
 st.markdown("Radial Category Breakdown")
-
 rad_controls, rad_chart = st.columns([1, 2])
 
 with rad_controls:
@@ -665,19 +695,10 @@ with rad_chart:
         st.info("No categorical columns found for a radial chart.")
 
 # ---------------------------
-# Tabs after Key Statistics
+# Tabs
 # ---------------------------
 
-tabs = st.tabs(
-    [
-        "Tables",
-        "Distribution",
-        "Scatter Plot",
-        "Bar Chart",
-        "Heatmap",
-        "Export",
-    ]
-)
+tabs = st.tabs(["Tables", "Distribution", "Scatter Plot", "Bar Chart", "Heatmap", "Export"])
 
 with tabs[0]:
     st.subheader("Statistics Tables")
@@ -698,19 +719,18 @@ with tabs[1]:
 
 with tabs[2]:
     st.subheader("Numeric Comparison Scatter Plot")
-
     controls, chart = st.columns([1, 2])
     with controls:
-        st.selectbox("X Axis (Numeric)", options=["None"] + numeric_cols, key="scatter_x")
-        st.selectbox("Y Axis (Numeric)", options=["None"] + numeric_cols, key="scatter_y")
+        scatter_x = st.selectbox("X Axis (Numeric)", options=["None"] + numeric_cols, key="scatter_x")
+        scatter_y = st.selectbox("Y Axis (Numeric)", options=["None"] + numeric_cols, key="scatter_y")
 
     _, visuals, _, _ = build_visuals(
         df,
         report_type,
         {
             "primary_numeric": None,
-            "scatter_x": None if st.session_state["scatter_x"] == "None" else st.session_state["scatter_x"],
-            "scatter_y": None if st.session_state["scatter_y"] == "None" else st.session_state["scatter_y"],
+            "scatter_x": None if scatter_x == "None" else scatter_x,
+            "scatter_y": None if scatter_y == "None" else scatter_y,
             "category_volume": None,
             "category_a": None,
             "category_b": None,
@@ -732,10 +752,9 @@ with tabs[2]:
 
 with tabs[3]:
     st.subheader("Category Distribution Bar Chart")
-
     controls, chart = st.columns([1, 2])
     with controls:
-        st.selectbox("Category Column", options=["None"] + categorical_cols, key="cat_volume_col")
+        cat_volume_col = st.selectbox("Category Column", options=["None"] + categorical_cols, key="cat_volume_col")
 
     _, visuals, _, _ = build_visuals(
         df,
@@ -744,7 +763,7 @@ with tabs[3]:
             "primary_numeric": None,
             "scatter_x": None,
             "scatter_y": None,
-            "category_volume": None if st.session_state["cat_volume_col"] == "None" else st.session_state["cat_volume_col"],
+            "category_volume": None if cat_volume_col == "None" else cat_volume_col,
             "category_a": None,
             "category_b": None,
             "radial_category_col": None,
@@ -765,11 +784,10 @@ with tabs[3]:
 
 with tabs[4]:
     st.subheader("Category Relationship Heatmap")
-
     controls, chart = st.columns([1, 2])
     with controls:
-        st.selectbox("Category A", options=["None"] + categorical_cols, key="cat_a")
-        st.selectbox("Category B", options=["None"] + categorical_cols, key="cat_b")
+        cat_a = st.selectbox("Category A", options=["None"] + categorical_cols, key="cat_a")
+        cat_b = st.selectbox("Category B", options=["None"] + categorical_cols, key="cat_b")
 
     _, visuals, _, _ = build_visuals(
         df,
@@ -779,8 +797,8 @@ with tabs[4]:
             "scatter_x": None,
             "scatter_y": None,
             "category_volume": None,
-            "category_a": None if st.session_state["cat_a"] == "None" else st.session_state["cat_a"],
-            "category_b": None if st.session_state["cat_b"] == "None" else st.session_state["cat_b"],
+            "category_a": None if cat_a == "None" else cat_a,
+            "category_b": None if cat_b == "None" else cat_b,
             "radial_category_col": None,
             "radial_categories": [],
             "radial_mode": "count",
@@ -799,7 +817,6 @@ with tabs[4]:
 
 with tabs[5]:
     st.subheader("Export")
-    st.write("Download your cleaned dataset for use in other visualization tools.")
     st.download_button(
         "Download CSV",
         data=df.to_csv(index=False),
