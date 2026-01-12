@@ -6,7 +6,6 @@ import streamlit as st
 
 from report_ai import build_visuals
 
-
 st.set_page_config(
     page_title="Dataset Reporting",
     layout="wide",
@@ -14,7 +13,7 @@ st.set_page_config(
 )
 
 # ---------------------------
-# Small helpers
+# Helpers
 # ---------------------------
 
 def read_df(uploaded_file) -> pd.DataFrame:
@@ -115,6 +114,7 @@ def enforce_y_axis_horizontal(fig):
         fig.update_yaxes(tickangle=0, automargin=True)
     except Exception:
         pass
+
     try:
         layout_updates = {}
         if hasattr(fig, "layout") and fig.layout:
@@ -125,6 +125,7 @@ def enforce_y_axis_horizontal(fig):
             fig.update_layout(**layout_updates)
     except Exception:
         pass
+
     return fig
 
 def force_theme(fig, theme: dict):
@@ -220,6 +221,80 @@ def force_theme(fig, theme: dict):
 
     return fig
 
+def compute_numeric_stats(df: pd.DataFrame, col: str) -> dict:
+    s = pd.to_numeric(df[col], errors="coerce").dropna()
+    if s.empty:
+        return {"sum": "N/A", "mean": "N/A", "median": "N/A", "min": "N/A", "max": "N/A"}
+    return {
+        "sum": float(s.sum()),
+        "mean": float(s.mean()),
+        "median": float(s.median()),
+        "min": float(s.min()),
+        "max": float(s.max()),
+    }
+
+# ---------------------------
+# Palettes
+# ---------------------------
+
+SOLID_PALETTES = {
+    "Slate": "#0f172a",
+    "Midnight": "#050814",
+    "Charcoal": "#111827",
+    "Graphite": "#1f2937",
+    "Ocean": "#0b3a5b",
+    "Deep Teal": "#064e4e",
+    "Indigo": "#1e1b4b",
+    "Cobalt": "#1e3a8a",
+    "Forest": "#0b3d2e",
+    "Mocha": "#2b1d15",
+    "Plum": "#2a1033",
+    "Burgundy": "#3f0d1f",
+    "Soft Gray": "#f3f4f6",
+    "Light Studio": "#f8fafc",
+    "Paper White": "#ffffff",
+    "Warm Cream": "#fbf7ef",
+    "Stone": "#e7e5e4",
+    "Sand": "#f5efe6",
+    "Mist Blue": "#eef2ff",
+    "Mint": "#ecfdf5",
+    "Blush": "#fff1f2",
+}
+
+_unique_hex_to_name = {}
+for nm, hx in SOLID_PALETTES.items():
+    hx_norm = str(hx).strip().lower()
+    if hx_norm not in _unique_hex_to_name:
+        _unique_hex_to_name[hx_norm] = nm
+SOLID_PALETTE_OPTIONS = [_unique_hex_to_name[hx] for hx in _unique_hex_to_name]
+
+# Keep picker synced to palette selection so solid palettes always apply
+def _sync_solid_picker():
+    choice = st.session_state.get("solid_choice_top", None)
+    if choice and choice in SOLID_PALETTES:
+        st.session_state["solid_picker_top"] = SOLID_PALETTES[choice]
+
+# ---------------------------
+# Build theme icon (SVG -> base64)
+# ---------------------------
+
+def build_paint_icon_uri(stroke_hex: str) -> str:
+    paint_svg = f"""
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+      <path d="M12 3c-4.97 0-9 3.58-9 8 0 2.95 1.89 5.52 4.66 6.97.63.33 1.34.03 1.63-.63l.54-1.25c.2-.47.66-.78 1.17-.78h1.77c1.1 0 1.99.89 1.99 1.99v1.55c0 .62.5 1.13 1.12 1.13C20.64 19.99 21 15.4 21 11c0-4.42-4.03-8-9-8Z"
+            stroke="{stroke_hex}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M8.4 10.2h.01M11.2 8.6h.01M14.2 10.2h.01M12.8 12.9h.01"
+            stroke="{stroke_hex}" stroke-width="2.6" stroke-linecap="round"/>
+      <path d="M16.2 14.7l3.1 3.1c.46.46.46 1.2 0 1.66l-.72.72c-.46.46-1.2.46-1.66 0l-3.1-3.1"
+            stroke="{stroke_hex}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    """.strip()
+    return "data:image/svg+xml;base64," + base64.b64encode(paint_svg.encode("utf-8")).decode("utf-8")
+
+# ---------------------------
+# CSS (includes circular icon expander button + compact layout)
+# ---------------------------
+
 def apply_css(bg_css: str, palette: dict, text: str, muted: str, icon_uri: str):
     st.markdown(
         f"""
@@ -244,7 +319,7 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, icon_uri: str):
             background: {palette["card_bg"]};
             border: 1px solid {palette["border"]};
             border-radius: 18px;
-            padding: 1.2rem;
+            padding: 1.1rem;
             backdrop-filter: blur(8px);
         }}
 
@@ -273,9 +348,6 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, icon_uri: str):
         div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"]:hover {{
             background: {palette["hover_bg"]} !important;
         }}
-        div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"]:hover * {{
-            color: {palette["menu_text"]} !important;
-        }}
 
         div[data-baseweb="select"] > div:focus-within {{
             box-shadow: 0 0 0 3px {palette["focus_ring"]} !important;
@@ -285,6 +357,7 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, icon_uri: str):
             background: {palette["widget_bg"]};
             border: 1px dashed {palette["border"]};
             border-radius: 12px;
+            padding: 0.65rem !important;
         }}
         [data-testid="stFileUploaderDropzone"] * {{
             color: {palette["widget_text"]} !important;
@@ -306,15 +379,11 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, icon_uri: str):
             background: {palette["button_hover_bg"]} !important;
         }}
 
-        /* Hide the expander summary so there is no arrow or long header box */
+        /* Make the appearance expander summary a single circular icon button */
         [data-testid="stExpander"] details > summary {{
-            display: none !important;
-        }}
-
-        /* Circular paint button (bigger) */
-        #paint_btn_wrap div[data-testid="stButton"] > button {{
-            width: 62px !important;
-            height: 62px !important;
+            width: 64px !important;
+            height: 64px !important;
+            min-height: 64px !important;
             padding: 0 !important;
             border-radius: 999px !important;
             border: 1px solid {palette["border"]} !important;
@@ -322,141 +391,106 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, icon_uri: str):
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
-            font-size: 0 !important;
-            line-height: 0 !important;
+            margin-left: auto !important;
         }}
-        #paint_btn_wrap div[data-testid="stButton"] > button:hover {{
-            background: {palette["button_hover_bg"]} !important;
+
+        /* Hide caret arrow inside summary */
+        [data-testid="stExpander"] details > summary svg {{
+            display: none !important;
         }}
-        #paint_btn_wrap div[data-testid="stButton"] > button::before {{
+
+        /* Hide any summary label text */
+        [data-testid="stExpander"] details > summary p {{
+            display: none !important;
+        }}
+
+        /* Paint icon */
+        [data-testid="stExpander"] details > summary::before {{
             content: "" !important;
             display: block !important;
-            width: 36px !important;
-            height: 36px !important;
+            width: 40px !important;
+            height: 40px !important;
             background-image: url("{icon_uri}") !important;
             background-size: contain !important;
             background-repeat: no-repeat !important;
             background-position: center !important;
+        }}
+
+        /* Compact spacing for the filters row */
+        .filters-tight [data-testid="stVerticalBlock"] {{
+            gap: 0.35rem !important;
+        }}
+
+        /* Preview button auto-fit */
+        .preview-autofit .stButton>button {{
+            width: auto !important;
+            padding: 0.35rem 0.7rem !important;
+            border-radius: 999px !important;
         }}
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-def compute_numeric_stats(df: pd.DataFrame, col: str) -> dict:
-    s = pd.to_numeric(df[col], errors="coerce").dropna()
-    if s.empty:
-        return {"sum": "N/A", "mean": "N/A", "median": "N/A", "min": "N/A", "max": "N/A"}
-    return {
-        "sum": float(s.sum()),
-        "mean": float(s.mean()),
-        "median": float(s.median()),
-        "min": float(s.min()),
-        "max": float(s.max()),
-    }
-
 # ---------------------------
-# Solid palettes
-# ---------------------------
-
-SOLID_PALETTES = {
-    "Slate": "#0f172a",
-    "Midnight": "#050814",
-    "Charcoal": "#111827",
-    "Graphite": "#1f2937",
-    "Ocean": "#0b3a5b",
-    "Deep Teal": "#064e4e",
-    "Indigo": "#1e1b4b",
-    "Cobalt": "#1e3a8a",
-    "Forest": "#0b3d2e",
-    "Mocha": "#2b1d15",
-    "Plum": "#2a1033",
-    "Burgundy": "#3f0d1f",
-    "Soft Gray": "#f3f4f6",
-    "Light Studio": "#f8fafc",
-    "Paper White": "#ffffff",
-    "Warm Cream": "#fbf7ef",
-    "Stone": "#e7e5e4",
-    "Sand": "#f5efe6",
-    "Mist Blue": "#eef2ff",
-    "Mint": "#ecfdf5",
-    "Blush": "#fff1f2",
-}
-
-_unique_hex_to_name = {}
-for name, hx in SOLID_PALETTES.items():
-    hx_norm = str(hx).strip().lower()
-    if hx_norm not in _unique_hex_to_name:
-        _unique_hex_to_name[hx_norm] = name
-SOLID_PALETTE_OPTIONS = [_unique_hex_to_name[hx] for hx in _unique_hex_to_name]
-
-# ---------------------------
-# Page header
+# Header row (title + circular icon expander)
 # ---------------------------
 
 st.markdown("# Dataset Reporting")
 
-header_left, header_right = st.columns([3, 1], vertical_alignment="top")
+# defaults for theme panel state
+if "bg_mode_top" not in st.session_state:
+    st.session_state["bg_mode_top"] = "Gradient"
+if "solid_choice_top" not in st.session_state:
+    st.session_state["solid_choice_top"] = SOLID_PALETTE_OPTIONS[0] if SOLID_PALETTE_OPTIONS else "Slate"
+if "solid_picker_top" not in st.session_state:
+    st.session_state["solid_picker_top"] = SOLID_PALETTES.get(st.session_state["solid_choice_top"], "#0f172a")
+if "grad_a_top" not in st.session_state:
+    st.session_state["grad_a_top"] = "#0b1020"
+if "grad_b_top" not in st.session_state:
+    st.session_state["grad_b_top"] = "#123055"
+if "grad_angle_top" not in st.session_state:
+    st.session_state["grad_angle_top"] = 135
 
-with header_left:
-    st.write("Upload a CSV or Excel file to generate key statistics and charts.")
-    file_top = st.file_uploader("Upload Dataset", type=["csv", "xlsx", "xls"], key="data_upload_top")
+title_col, icon_col = st.columns([7, 1], vertical_alignment="center")
+with title_col:
+    st.caption("Upload a CSV or Excel file to generate key statistics and charts.")
 
-    try:
-        @st.dialog("Dataset Preview")
-        def preview_dialog(df_to_show: pd.DataFrame, rows: int):
-            st.dataframe(df_to_show.head(rows), use_container_width=True)
-            st.caption(f"Showing the first {rows} rows.")
-    except Exception:
-        preview_dialog = None
-
-# Theme panel toggle state
-if "theme_open" not in st.session_state:
-    st.session_state.theme_open = False
-
-with header_right:
-    st.markdown("<div id='paint_btn_wrap'>", unsafe_allow_html=True)
-    clicked = st.button(" ", key="paint_toggle_btn", help="Appearance")
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    if clicked:
-        st.session_state.theme_open = not st.session_state.theme_open
-
-    # Actual panel (summary hidden by CSS, so no arrow / long box is shown)
-    with st.expander(" ", expanded=st.session_state.theme_open):
+with icon_col:
+    # The expander summary is styled into a circular icon button
+    with st.expander(" ", expanded=False):
         bg_mode = st.selectbox("Background Type", ["Solid", "Gradient", "Image"], index=1, key="bg_mode_top")
 
-        img_upload = None
-        solid_choice = SOLID_PALETTE_OPTIONS[0] if SOLID_PALETTE_OPTIONS else "Slate"
-        solid_picker = "#0f172a"
-        grad_a = "#0b1020"
-        grad_b = "#123055"
-        grad_angle = 135
-
         if bg_mode == "Solid":
-            solid_choice = st.selectbox("Solid Palette", SOLID_PALETTE_OPTIONS, index=0, key="solid_choice_top")
-            solid_picker = st.color_picker(
-                "Solid",
-                value=SOLID_PALETTES.get(solid_choice, "#0f172a"),
+            st.selectbox(
+                "Solid Palette",
+                SOLID_PALETTE_OPTIONS,
+                index=0,
+                key="solid_choice_top",
+                on_change=_sync_solid_picker,
+            )
+            st.color_picker(
+                "Solid Color",
+                value=st.session_state.get("solid_picker_top", "#0f172a"),
                 key="solid_picker_top",
                 label_visibility="collapsed",
             )
 
         if bg_mode == "Gradient":
             st.caption("Real gradient background.")
-            grad_a = st.color_picker("Color A", value=grad_a, key="grad_a_top")
-            grad_b = st.color_picker("Color B", value=grad_b, key="grad_b_top")
-            grad_angle = st.slider("Angle", 0, 360, grad_angle, key="grad_angle_top")
+            st.color_picker("Color A", value=st.session_state.get("grad_a_top", "#0b1020"), key="grad_a_top")
+            st.color_picker("Color B", value=st.session_state.get("grad_b_top", "#123055"), key="grad_b_top")
+            st.slider("Angle", 0, 360, st.session_state.get("grad_angle_top", 135), key="grad_angle_top")
 
         if bg_mode == "Image":
-            img_upload = st.file_uploader(
+            st.file_uploader(
                 "Upload Background Image",
                 type=["png", "jpg", "jpeg", "webp"],
                 key="bg_image_top",
             )
 
 # ---------------------------
-# Theme construction
+# Theme construction (must happen after controls exist)
 # ---------------------------
 
 bg_mode = st.session_state.get("bg_mode_top", "Gradient")
@@ -522,19 +556,7 @@ palette = {
     "button_text": button_text,
 }
 
-# Create icon as base64 SVG using current text color (so it stays readable)
-paint_svg = f"""
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
-  <path d="M12 3c-4.97 0-9 3.58-9 8 0 2.95 1.89 5.52 4.66 6.97.63.33 1.34.03 1.63-.63l.54-1.25c.2-.47.66-.78 1.17-.78h1.77c1.1 0 1.99.89 1.99 1.99v1.55c0 .62.5 1.13 1.12 1.13C20.64 19.99 21 15.4 21 11c0-4.42-4.03-8-9-8Z"
-        stroke="{page_text}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M8.4 10.2h.01M11.2 8.6h.01M14.2 10.2h.01M12.8 12.9h.01"
-        stroke="{page_text}" stroke-width="2.4" stroke-linecap="round"/>
-  <path d="M16.2 14.7l3.1 3.1c.46.46.46 1.2 0 1.66l-.72.72c-.46.46-1.2.46-1.66 0l-3.1-3.1"
-        stroke="{page_text}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>
-""".strip()
-icon_uri = "data:image/svg+xml;base64," + base64.b64encode(paint_svg.encode("utf-8")).decode("utf-8")
-
+icon_uri = build_paint_icon_uri(page_text)
 apply_css(bg_css, palette, page_text, page_muted, icon_uri)
 
 plotly_template = "plotly_dark" if dark else "plotly_white"
@@ -553,29 +575,13 @@ theme = {
 }
 
 # ---------------------------
-# Upload required
+# Filters above upload (compact)
 # ---------------------------
 
-if file_top is None:
-    st.info("Upload a dataset to begin.")
-    st.stop()
-
-try:
-    df = read_df(file_top)
-except Exception as e:
-    st.error(f"Could not read the file. {e}")
-    st.stop()
-
-numeric_cols = df.select_dtypes(include="number").columns.tolist()
-categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
-
-# ---------------------------
-# Filters section (single horizontal row, small)
-# ---------------------------
-
+st.markdown("<div class='filters-tight'>", unsafe_allow_html=True)
 st.markdown("### Filters")
 
-f1, f2, f3, f_spacer = st.columns([2.1, 1.4, 1.4, 5.1], vertical_alignment="center")
+f1, f2, f3, _ = st.columns([2.0, 1.4, 1.4, 5.2], vertical_alignment="center")
 
 with f1:
     report_type = st.selectbox(
@@ -610,17 +616,44 @@ with f3:
     )
     st.caption("Preview Rows")
 
-try:
-    @st.dialog("Dataset Preview")
-    def preview_dialog(df_to_show: pd.DataFrame, rows: int):
-        st.dataframe(df_to_show.head(rows), use_container_width=True)
-        st.caption(f"Showing the first {rows} rows.")
-except Exception:
-    preview_dialog = None
+st.markdown("</div>", unsafe_allow_html=True)
 
-preview_clicked = st.button("Preview Dataset", key="preview_dataset_btn_top")
-if preview_dialog is not None and preview_clicked:
-    preview_dialog(df, int(max_preview_rows))
+# ---------------------------
+# Upload section (preview underneath)
+# ---------------------------
+
+left_upload, right_space = st.columns([2, 6], vertical_alignment="top")
+with left_upload:
+    file_top = st.file_uploader("Upload Dataset", type=["csv", "xlsx", "xls"], key="data_upload_top")
+
+    try:
+        @st.dialog("Dataset Preview")
+        def preview_dialog(df_to_show: pd.DataFrame, rows: int):
+            st.dataframe(df_to_show.head(rows), use_container_width=True)
+            st.caption(f"Showing the first {rows} rows.")
+    except Exception:
+        preview_dialog = None
+
+# Stop until upload exists
+if file_top is None:
+    st.info("Upload a dataset to begin.")
+    st.stop()
+
+try:
+    df = read_df(file_top)
+except Exception as e:
+    st.error(f"Could not read the file. {e}")
+    st.stop()
+
+with left_upload:
+    st.markdown("<div class='preview-autofit'>", unsafe_allow_html=True)
+    preview_clicked = st.button("Preview Dataset", key="preview_dataset_btn_under_upload")
+    st.markdown("</div>", unsafe_allow_html=True)
+    if preview_dialog is not None and preview_clicked:
+        preview_dialog(df, int(st.session_state.get("max_preview_rows_main", 25)))
+
+numeric_cols = df.select_dtypes(include="number").columns.tolist()
+categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
 
 # ---------------------------
 # Key Statistics
@@ -638,7 +671,7 @@ primary_numeric = st.selectbox(
 
 summary, visuals_kpi, numeric_df, categorical_df = build_visuals(
     df=df,
-    report_type=report_type,
+    report_type=st.session_state.get("report_type_main", "Overview"),
     user_choices={
         "primary_numeric": None if primary_numeric == "None" else primary_numeric,
         "scatter_x": None,
@@ -651,7 +684,7 @@ summary, visuals_kpi, numeric_df, categorical_df = build_visuals(
         "radial_mode": "count",
         "radial_value_col": None,
     },
-    max_categories=max_categories,
+    max_categories=int(st.session_state.get("max_categories_main", 20)),
 )
 
 kpi_cols = st.columns(5)
@@ -716,7 +749,7 @@ with rad_chart:
         radial_mode = "sum" if radial_mode_label == "Sum of Numeric Column" else "count"
         _, visuals_radial_kpi, _, _ = build_visuals(
             df=df,
-            report_type=report_type,
+            report_type=st.session_state.get("report_type_main", "Overview"),
             user_choices={
                 "primary_numeric": None if primary_numeric == "None" else primary_numeric,
                 "scatter_x": None,
@@ -729,7 +762,7 @@ with rad_chart:
                 "radial_mode": radial_mode,
                 "radial_value_col": radial_value_col_kpi,
             },
-            max_categories=max_categories,
+            max_categories=int(st.session_state.get("max_categories_main", 20)),
         )
         fig = get_fig(visuals_radial_kpi, "radial_donut")
         if fig is not None:
@@ -773,7 +806,7 @@ with tabs[2]:
 
     _, visuals, _, _ = build_visuals(
         df,
-        report_type,
+        st.session_state.get("report_type_main", "Overview"),
         {
             "primary_numeric": None,
             "scatter_x": None if scatter_x == "None" else scatter_x,
@@ -786,7 +819,7 @@ with tabs[2]:
             "radial_mode": "count",
             "radial_value_col": None,
         },
-        max_categories,
+        int(st.session_state.get("max_categories_main", 20)),
     )
 
     with chart:
@@ -805,7 +838,7 @@ with tabs[3]:
 
     _, visuals, _, _ = build_visuals(
         df,
-        report_type,
+        st.session_state.get("report_type_main", "Overview"),
         {
             "primary_numeric": None,
             "scatter_x": None,
@@ -818,7 +851,7 @@ with tabs[3]:
             "radial_mode": "count",
             "radial_value_col": None,
         },
-        max_categories,
+        int(st.session_state.get("max_categories_main", 20)),
     )
 
     with chart:
@@ -838,7 +871,7 @@ with tabs[4]:
 
     _, visuals, _, _ = build_visuals(
         df,
-        report_type,
+        st.session_state.get("report_type_main", "Overview"),
         {
             "primary_numeric": None,
             "scatter_x": None,
@@ -851,7 +884,7 @@ with tabs[4]:
             "radial_mode": "count",
             "radial_value_col": None,
         },
-        max_categories,
+        int(st.session_state.get("max_categories_main", 20)),
     )
 
     with chart:
