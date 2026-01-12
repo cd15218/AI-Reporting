@@ -84,7 +84,6 @@ def _mix_rgb(a, b, t: float):
 def generate_shades(base_hex: str, n: int, dark_mode: bool) -> list[str]:
     """
     Creates n shades of the same base color.
-    In dark mode, we bias toward brighter shades. In light mode, slightly deeper shades.
     """
     try:
         base = _hex_to_rgb(base_hex)
@@ -92,13 +91,13 @@ def generate_shades(base_hex: str, n: int, dark_mode: bool) -> list[str]:
         base = (59, 130, 246)  # fallback blue
 
     if dark_mode:
-        # Mix toward white for brighter shades that pop on dark backgrounds
+        # Mix toward white so it pops on dark backgrounds
         target_a = base
         target_b = (245, 245, 245)
         ts = [0.05 + (i / max(1, n - 1)) * 0.75 for i in range(n)]
         rgbs = [_mix_rgb(target_a, target_b, t) for t in ts]
     else:
-        # Mix toward a deeper shade (toward black) so it still reads on light backgrounds
+        # Mix from near-white toward base for readability on light backgrounds
         target_a = (250, 250, 250)
         target_b = base
         ts = [0.20 + (i / max(1, n - 1)) * 0.70 for i in range(n)]
@@ -107,19 +106,36 @@ def generate_shades(base_hex: str, n: int, dark_mode: bool) -> list[str]:
     return [_rgb_to_hex(rgb) for rgb in rgbs]
 
 def build_colorscale(shades: list[str]) -> list:
-    """
-    Plotly colorscale format: [(pos, color), ...]
-    """
     if not shades:
         return [(0.0, "#93c5fd"), (1.0, "#1d4ed8")]
     if len(shades) == 1:
         return [(0.0, shades[0]), (1.0, shades[0])]
-
-    scale = []
     steps = len(shades) - 1
-    for i, c in enumerate(shades):
-        scale.append((i / steps, c))
-    return scale
+    return [(i / steps, c) for i, c in enumerate(shades)]
+
+def _safe_set(obj, path: list[str], value):
+    """
+    Safely set nested attributes if they exist.
+    Example: _safe_set(trace, ["marker", "color"], "#fff")
+    """
+    try:
+        cur = obj
+        for i, key in enumerate(path):
+            if i == len(path) - 1:
+                setattr(cur, key, value)
+                return True
+            nxt = getattr(cur, key, None)
+            if nxt is None:
+                # Create dict-like containers for Plotly objects
+                try:
+                    setattr(cur, key, {})
+                    nxt = getattr(cur, key, None)
+                except Exception:
+                    return False
+            cur = nxt
+        return False
+    except Exception:
+        return False
 
 def apply_background_and_theme_css(
     mode: str,
@@ -326,8 +342,14 @@ def apply_background_and_theme_css(
 
     return plotly_template, theme
 
-def apply_plotly_theme(fig, theme: dict):
-    # Apply global layout
+def apply_plotly_theme_all(fig, theme: dict):
+    """
+    Ensures ALL visualizations match the theme:
+    - layout, fonts, backgrounds
+    - colorway for categorical series
+    - per-trace overrides for common trace types
+    - continuous colorscale for heatmaps/contours/etc
+    """
     fig.update_layout(
         template=theme["plotly_template"],
         paper_bgcolor=theme["plot_paper_bg"],
@@ -339,67 +361,71 @@ def apply_plotly_theme(fig, theme: dict):
         colorway=theme["shades"],
     )
 
-    # Axis styling (when present)
-    if hasattr(fig.layout, "xaxis"):
-        fig.update_xaxes(
-            title_font=dict(color=theme["text"]),
-            tickfont=dict(color=theme["text"]),
-            gridcolor=theme["border"]
-        )
-    if hasattr(fig.layout, "yaxis"):
-        fig.update_yaxes(
-            title_font=dict(color=theme["text"]),
-            tickfont=dict(color=theme["text"]),
-            gridcolor=theme["border"]
-        )
+    # axis styling (safe)
+    try:
+        fig.update_xaxes(title_font=dict(color=theme["text"]), tickfont=dict(color=theme["text"]), gridcolor=theme["border"])
+        fig.update_yaxes(title_font=dict(color=theme["text"]), tickfont=dict(color=theme["text"]), gridcolor=theme["border"])
+    except Exception:
+        pass
 
-    # Trace specific styling so the entire app matches the appearance accent
+    # Apply trace-level defaults
     for tr in fig.data:
-        t = getattr(tr, "type", "")
+        t = getattr(tr, "type", "") or ""
 
-        # Donut / pie charts (radial)
+        # Pie/Donut
         if t == "pie":
             try:
-                n = len(tr.labels) if getattr(tr, "labels", None) is not None else 12
-                tr.marker = tr.marker or {}
-                tr.marker.colors = theme["shades"][:max(1, min(n, len(theme["shades"])))]
+                n = len(getattr(tr, "labels", []) or [])
+                if n <= 0:
+                    n = 12
+                colors = theme["shades"][:max(1, min(n, len(theme["shades"])))]
+                _safe_set(tr, ["marker", "colors"], colors)
+                _safe_set(tr, ["marker", "line"], dict(width=1, color=theme["border"]))
+                _safe_set(tr, ["textfont", "color"], theme["text"])
             except Exception:
                 pass
 
-        # Bars
-        if t == "bar":
-            try:
-                # Let Plotly handle category-to-color mapping via colorway,
-                # but set a pleasant border for clarity.
-                tr.marker = tr.marker or {}
-                tr.marker.line = dict(width=0.5, color=theme["border"])
-            except Exception:
-                pass
+        # Bar
+        elif t == "bar":
+            _safe_set(tr, ["marker", "line"], dict(width=0.7, color=theme["border"]))
+            # Let layout colorway drive the fill colors unless already set
 
-        # Scatter points
-        if t == "scatter":
-            try:
-                tr.marker = tr.marker or {}
-                if not getattr(tr.marker, "color", None):
-                    tr.marker.color = theme["accent"]
-                tr.marker.line = dict(width=0.5, color=theme["border"])
-            except Exception:
-                pass
+        # Scatter
+        elif t == "scatter":
+            # If no marker color is set, use accent
+            if getattr(getattr(tr, "marker", None), "color", None) is None:
+                _safe_set(tr, ["marker", "color"], theme["accent"])
+            _safe_set(tr, ["marker", "line"], dict(width=0.7, color=theme["border"]))
 
-        # Heatmap
-        if t == "heatmap":
+        # Histogram
+        elif t == "histogram":
+            if getattr(getattr(tr, "marker", None), "color", None) is None:
+                _safe_set(tr, ["marker", "color"], theme["shades"][4] if len(theme["shades"]) > 4 else theme["accent"])
+            _safe_set(tr, ["marker", "line"], dict(width=0.7, color=theme["border"]))
+
+        # Heatmap + similar continuous maps
+        elif t in {"heatmap", "contour", "histogram2d", "histogram2dcontour", "densitymapbox"}:
             try:
                 tr.colorscale = theme["continuous_scale"]
             except Exception:
                 pass
 
-        # Histogram
-        if t == "histogram":
+        # Box/Violin
+        elif t in {"box", "violin"}:
+            # Use accent for fill if unset
+            if getattr(tr, "fillcolor", None) is None:
+                try:
+                    tr.fillcolor = theme["shades"][6] if len(theme["shades"]) > 6 else theme["accent"]
+                except Exception:
+                    pass
+            _safe_set(tr, ["line", "color"], theme["border"])
+
+        # Fallback: if trace exposes a "marker" and no color, set accent
+        else:
             try:
-                tr.marker = tr.marker or {}
-                if not getattr(tr.marker, "color", None):
-                    tr.marker.color = theme["shades"][4] if len(theme["shades"]) > 4 else theme["accent"]
-                tr.marker.line = dict(width=0.5, color=theme["border"])
+                marker = getattr(tr, "marker", None)
+                if marker is not None and getattr(marker, "color", None) is None:
+                    _safe_set(tr, ["marker", "color"], theme["accent"])
             except Exception:
                 pass
 
@@ -499,7 +525,7 @@ if bg_mode == "Solid":
 elif bg_mode == "Gradient":
     accent_hex = gradient_color_b
 else:
-    accent_hex = "#3b82f6"  # fallback for image mode
+    accent_hex = "#3b82f6"
 
 plotly_template, theme = apply_background_and_theme_css(
     bg_mode,
@@ -545,9 +571,9 @@ df = basic_clean(df)
 numeric_cols = df.select_dtypes(include="number").columns.tolist()
 categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
 
-# ---------------- DEFAULTS FOR VISUALIZATION CONTROLS (NO "NONE" WHEN POSSIBLE) ----------------
+# ---------------- DEFAULTS FOR VISUALIZATION CONTROLS ----------------
 
-def _set_default_if_missing(key: str, value: str):
+def _set_default_if_missing(key: str, value):
     if key not in st.session_state:
         st.session_state[key] = value
 
@@ -573,37 +599,7 @@ _set_default_if_missing("radial_mode", default_radial_mode)
 _set_default_if_missing("radial_value_col", default_radial_value_col)
 _set_default_if_missing("radial_pick", [])
 
-# ---------------- DATA PREVIEW (COMPACT) ----------------
-
-st.subheader("Dataset")
-
-preview_clicked = False
-try:
-    @st.dialog("Dataset Preview")
-    def _preview_dialog(df_to_show: pd.DataFrame, rows: int):
-        st.dataframe(df_to_show.head(rows), use_container_width=True)
-        st.caption(f"Showing the first {rows} rows.")
-
-    cols = st.columns([1, 3])
-    with cols[0]:
-        st.markdown('<div class="link-btn">', unsafe_allow_html=True)
-        preview_clicked = st.button("Preview Dataset", key="preview_dataset_btn")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with cols[1]:
-        st.caption("Opens a popup with the first rows of your dataset.")
-
-    if preview_clicked:
-        _preview_dialog(df, max_preview_rows)
-
-except Exception:
-    with st.expander("Preview Dataset", expanded=False):
-        st.dataframe(df.head(max_preview_rows), use_container_width=True)
-        st.caption(f"Showing the first {max_preview_rows} rows.")
-
-st.divider()
-
-# ---------------- KEY STATISTICS ----------------
+# ---------------- KEY STATISTICS (FRONT AND CENTER) ----------------
 
 st.subheader("Key Statistics")
 
@@ -659,6 +655,7 @@ with kpi_right:
     k7.metric("Categorical Columns", summary["categorical_count"])
     k8.metric("Missing Cells", summary["missing_cells"])
 
+# Radial under KPIs (still part of Key Statistics)
 st.markdown("Radial Category Breakdown")
 
 rad_controls, rad_chart = st.columns([1, 2])
@@ -721,9 +718,9 @@ with rad_chart:
 
         fig = get_fig(visuals_radial_kpi, "radial_donut")
         if fig is not None:
-            fig = apply_plotly_theme(fig, theme)
+            fig = apply_plotly_theme_all(fig, theme)
             st.plotly_chart(fig, use_container_width=True)
-            st.caption("Colors use different shades of one base color for a cohesive look.")
+            st.caption("Colors use different shades of the active theme accent.")
         else:
             st.info("Select a valid category column to generate the radial chart.")
     else:
@@ -739,8 +736,39 @@ if summary["primary_numeric_column"]:
     with st.expander("Distribution Chart", expanded=True):
         fig = get_fig(visuals_kpi, "numeric_distribution")
         if fig is not None:
-            fig = apply_plotly_theme(fig, theme)
+            fig = apply_plotly_theme_all(fig, theme)
             st.plotly_chart(fig, use_container_width=True)
+
+st.divider()
+
+# ---------------- DATASET (COMPACT, LESS SPACE) ----------------
+
+row_ct = int(df.shape[0])
+col_ct = int(df.shape[1])
+st.caption(f"Dataset loaded: {row_ct:,} rows • {col_ct:,} columns")
+
+preview_clicked = False
+try:
+    @st.dialog("Dataset Preview")
+    def _preview_dialog(df_to_show: pd.DataFrame, rows: int):
+        st.dataframe(df_to_show.head(rows), use_container_width=True)
+        st.caption(f"Showing the first {rows} rows.")
+
+    c1, c2 = st.columns([1, 5], vertical_alignment="center")
+    with c1:
+        st.markdown('<div class="link-btn">', unsafe_allow_html=True)
+        preview_clicked = st.button("Preview", key="preview_dataset_btn")
+        st.markdown("</div>", unsafe_allow_html=True)
+    with c2:
+        st.caption("Opens a popup with a quick preview. No extra page space.")
+
+    if preview_clicked:
+        _preview_dialog(df, max_preview_rows)
+
+except Exception:
+    with st.expander("Preview Dataset", expanded=False):
+        st.dataframe(df.head(max_preview_rows), use_container_width=True)
+        st.caption(f"Showing the first {max_preview_rows} rows.")
 
 st.divider()
 
@@ -786,8 +814,10 @@ with st.expander("Numeric Comparison Scatter Plot", expanded=scatter_ready):
     with chart:
         fig = get_fig(visuals_scatter, "numeric_scatter")
         if fig is not None:
-            fig = apply_plotly_theme(fig, theme)
+            fig = apply_plotly_theme_all(fig, theme)
             st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Select two different numeric columns to generate the scatter plot.")
 
 with st.expander("Category Distribution Bar Chart", expanded=cat_volume_ready):
     controls, chart = st.columns([1, 2])
@@ -813,8 +843,10 @@ with st.expander("Category Distribution Bar Chart", expanded=cat_volume_ready):
     with chart:
         fig = get_fig(visuals_cat_vol, "category_volume")
         if fig is not None:
-            fig = apply_plotly_theme(fig, theme)
+            fig = apply_plotly_theme_all(fig, theme)
             st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Select a categorical column to generate the bar chart.")
 
 with st.expander("Category Relationship Heatmap", expanded=heatmap_ready):
     controls, chart = st.columns([1, 2])
@@ -841,8 +873,10 @@ with st.expander("Category Relationship Heatmap", expanded=heatmap_ready):
     with chart:
         fig = get_fig(visuals_heatmap, "category_heatmap")
         if fig is not None:
-            fig = apply_plotly_theme(fig, theme)
+            fig = apply_plotly_theme_all(fig, theme)
             st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Select two different categorical columns to generate the heatmap.")
 
 with st.expander("Radial Category Donut Chart", expanded=radial_ready):
     controls, chart = st.columns([1, 2])
@@ -906,9 +940,11 @@ with st.expander("Radial Category Donut Chart", expanded=radial_ready):
     with chart:
         fig = get_fig(visuals_radial, "radial_donut")
         if fig is not None:
-            fig = apply_plotly_theme(fig, theme)
+            fig = apply_plotly_theme_all(fig, theme)
             st.plotly_chart(fig, use_container_width=True)
-            st.caption("Colors use different shades of one base color for a cohesive look.")
+            st.caption("Colors use different shades of the active theme accent.")
+        else:
+            st.info("Select a categorical column to generate the donut chart.")
 
 st.divider()
 
