@@ -108,6 +108,16 @@ def safe_len(x) -> int:
         except Exception:
             return 0
 
+def force_all_yaxis_tickangle_zero(fig):
+    # yaxis, yaxis2, yaxis3, ...
+    try:
+        if hasattr(fig, "layout") and fig.layout:
+            for k in list(fig.layout.keys()):
+                if k.startswith("yaxis"):
+                    fig.layout[k].update(tickangle=0)
+    except Exception:
+        pass
+
 def force_theme(fig, theme: dict):
     fig.update_layout(
         template=theme["plotly_template"],
@@ -119,11 +129,24 @@ def force_theme(fig, theme: dict):
         margin=dict(t=70, l=35, r=35, b=35),
         colorway=theme["shades"],
     )
+
     try:
-        fig.update_xaxes(tickfont=dict(color=theme["text"]), title_font=dict(color=theme["text"]), gridcolor=theme["border"])
-        fig.update_yaxes(tickfont=dict(color=theme["text"]), title_font=dict(color=theme["text"]), gridcolor=theme["border"])
+        fig.update_xaxes(
+            tickfont=dict(color=theme["text"]),
+            title_font=dict(color=theme["text"]),
+            gridcolor=theme["border"],
+            tickangle=0,
+        )
+        fig.update_yaxes(
+            tickfont=dict(color=theme["text"]),
+            title_font=dict(color=theme["text"]),
+            gridcolor=theme["border"],
+            tickangle=0,
+        )
     except Exception:
         pass
+
+    force_all_yaxis_tickangle_zero(fig)
 
     shade_idx = 0
     for tr in fig.data:
@@ -188,11 +211,10 @@ def force_theme(fig, theme: dict):
                 except Exception:
                     pass
 
+    force_all_yaxis_tickangle_zero(fig)
     return fig
 
-def apply_css(bg_css: str, dark: bool, palette: dict):
-    text = "#e5e7eb" if dark else "#0f172a"
-    muted = "#cbd5e1" if dark else "#334155"
+def apply_css(bg_css: str, dark: bool, palette: dict, text: str, muted: str):
     st.markdown(
         f"""
         <style>
@@ -209,7 +231,7 @@ def apply_css(bg_css: str, dark: bool, palette: dict):
         [data-testid="stAppViewContainer"] > .main {{
             background-color: transparent !important;
             padding-top: 0rem !important;
-            padding-bottom: 6.5rem !important; /* prevents Streamlit Cloud footer pill overlap */
+            padding-bottom: 6.5rem !important;
         }}
 
         .block-container {{
@@ -232,12 +254,41 @@ def apply_css(bg_css: str, dark: bool, palette: dict):
         textarea, input:not([type="file"]) {{
             background: {palette["widget_bg"]} !important;
             border: 1px solid {palette["border"]} !important;
+            color: {palette["widget_text"]} !important;
+        }}
+
+        div[data-baseweb="select"] span {{
+            color: {palette["widget_text"]} !important;
+        }}
+
+        div[data-baseweb="popover"] div[data-baseweb="menu"] {{
+            background: {palette["menu_bg"]} !important;
+            border: 1px solid {palette["border"]} !important;
+            border-radius: 12px !important;
+            overflow: hidden !important;
+        }}
+        div[data-baseweb="popover"] div[data-baseweb="menu"] * {{
+            color: {palette["menu_text"]} !important;
+        }}
+
+        div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"]:hover {{
+            background: {palette["hover_bg"]} !important;
+        }}
+        div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"]:hover * {{
+            color: {palette["menu_text"]} !important;
+        }}
+
+        div[data-baseweb="select"] > div:focus-within {{
+            box-shadow: 0 0 0 3px {palette["focus_ring"]} !important;
         }}
 
         [data-testid="stFileUploaderDropzone"] {{
             background: {palette["widget_bg"]};
             border: 1px dashed {palette["border"]};
             border-radius: 12px;
+        }}
+        [data-testid="stFileUploaderDropzone"] * {{
+            color: {palette["widget_text"]} !important;
         }}
 
         [data-testid="stMetric"] {{
@@ -247,19 +298,13 @@ def apply_css(bg_css: str, dark: bool, palette: dict):
             padding: 0.6rem;
         }}
 
-        div[data-baseweb="popover"] div[data-baseweb="menu"] {{
-            background: {palette["menu_bg"]} !important;
+        button[kind="primary"], button[kind="secondary"], .stButton>button {{
+            background: {palette["button_bg"]} !important;
             border: 1px solid {palette["border"]} !important;
-            border-radius: 12px !important;
-            overflow: hidden !important;
+            color: {palette["button_text"]} !important;
         }}
-
-        div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"]:hover {{
-            background: {palette["hover_bg"]} !important;
-        }}
-
-        div[data-baseweb="select"] > div:focus-within {{
-            box-shadow: 0 0 0 3px {palette["focus_ring"]} !important;
+        .stButton>button:hover {{
+            background: {palette["button_hover_bg"]} !important;
         }}
         </style>
         """,
@@ -286,43 +331,30 @@ def compute_numeric_stats(df: pd.DataFrame, col: str) -> dict:
 # Solid palettes (expanded + de-duplicated)
 # ---------------------------
 
-# If two palettes share the same hex, the first one wins and the duplicate is dropped automatically below.
 SOLID_PALETTES = {
-    # Dark neutrals
     "Slate": "#0f172a",
     "Midnight": "#050814",
     "Charcoal": "#111827",
     "Graphite": "#1f2937",
-
-    # Cool accents
     "Ocean": "#0b3a5b",
     "Deep Teal": "#064e4e",
     "Indigo": "#1e1b4b",
     "Cobalt": "#1e3a8a",
-
-    # Warm accents
     "Forest": "#0b3d2e",
     "Mocha": "#2b1d15",
     "Plum": "#2a1033",
     "Burgundy": "#3f0d1f",
-
-    # Light neutrals
     "Soft Gray": "#f3f4f6",
     "Light Studio": "#f8fafc",
     "Paper White": "#ffffff",
     "Warm Cream": "#fbf7ef",
-
-    # Mid neutrals
     "Stone": "#e7e5e4",
     "Sand": "#f5efe6",
-
-    # Soft tints
     "Mist Blue": "#eef2ff",
     "Mint": "#ecfdf5",
     "Blush": "#fff1f2",
 }
 
-# De-duplicate by hex value while preserving the first occurrence order
 _unique_hex_to_name = {}
 for name, hx in SOLID_PALETTES.items():
     hx_norm = str(hx).strip().lower()
@@ -340,7 +372,8 @@ with st.sidebar:
         bg_mode = st.selectbox("Background Type", ["Solid", "Gradient", "Image"], index=1)
 
         solid_choice = SOLID_PALETTE_OPTIONS[0] if SOLID_PALETTE_OPTIONS else "Slate"
-        custom_solid = ""
+        solid_picker = "#0f172a"
+
         img_upload = None
 
         grad_a = "#0b1020"
@@ -349,7 +382,7 @@ with st.sidebar:
 
         if bg_mode == "Solid":
             solid_choice = st.selectbox("Solid Palette", SOLID_PALETTE_OPTIONS, index=0)
-            custom_solid = st.text_input("Optional Custom Hex", value="", placeholder="#112233")
+            solid_picker = st.color_picker("Solid Color Picker", value=SOLID_PALETTES.get(solid_choice, "#0f172a"))
 
         if bg_mode == "Gradient":
             st.caption("Real gradient background.")
@@ -370,9 +403,10 @@ with st.sidebar:
 # Theme construction
 # ---------------------------
 
-solid_hex = SOLID_PALETTES.get(solid_choice, "#0f172a")
-if custom_solid and custom_solid.strip().startswith("#") and len(custom_solid.strip()) in (4, 7):
-    solid_hex = custom_solid.strip()
+if bg_mode == "Solid":
+    solid_hex = solid_picker
+else:
+    solid_hex = SOLID_PALETTES.get(solid_choice, "#0f172a")
 
 grad_css = f"linear-gradient({grad_angle}deg, {grad_a} 0%, {grad_b} 100%)"
 grad_dark = is_dark_grad(grad_a, grad_b)
@@ -401,15 +435,33 @@ else:
         bg_css = "background: #0f172a !important;"
     accent = "#3b82f6"
 
+page_text = "#e5e7eb" if dark else "#0f172a"
+page_muted = "#cbd5e1" if dark else "#334155"
+
+widget_bg = "rgba(255,255,255,0.10)" if dark else "rgba(15,23,42,0.06)"
+widget_text = "#e5e7eb" if dark else "#0f172a"
+
+menu_bg = "rgba(15, 23, 42, 0.96)" if dark else "rgba(255, 255, 255, 0.98)"
+menu_text = "#e5e7eb" if dark else "#0f172a"
+
+button_bg = "rgba(255,255,255,0.12)" if dark else "rgba(15,23,42,0.08)"
+button_hover_bg = "rgba(255,255,255,0.18)" if dark else "rgba(15,23,42,0.12)"
+button_text = "#e5e7eb" if dark else "#0f172a"
+
 palette = {
     "card_bg": "rgba(2, 6, 23, 0.58)" if dark else "rgba(255, 255, 255, 0.92)",
     "border": "rgba(148, 163, 184, 0.35)" if dark else "rgba(15, 23, 42, 0.16)",
-    "widget_bg": "rgba(255,255,255,0.06)" if dark else "rgba(15,23,42,0.06)",
-    "menu_bg": "rgba(15, 23, 42, 0.96)" if dark else "rgba(255, 255, 255, 0.98)",
+    "widget_bg": widget_bg,
+    "widget_text": widget_text,
+    "menu_bg": menu_bg,
+    "menu_text": menu_text,
     "hover_bg": "rgba(148, 163, 184, 0.22)" if dark else "rgba(15, 23, 42, 0.10)",
     "focus_ring": "rgba(148, 163, 184, 0.40)" if dark else "rgba(15, 23, 42, 0.25)",
+    "button_bg": button_bg,
+    "button_hover_bg": button_hover_bg,
+    "button_text": button_text,
 }
-apply_css(bg_css, dark, palette)
+apply_css(bg_css, dark, palette, page_text, page_muted)
 
 plotly_template = "plotly_dark" if dark else "plotly_white"
 pio.templates.default = plotly_template
@@ -419,7 +471,7 @@ theme = {
     "plotly_template": plotly_template,
     "paper_bg": "rgba(2, 6, 23, 0.18)" if dark else "rgba(255, 255, 255, 0.80)",
     "plot_bg": "rgba(2, 6, 23, 0.06)" if dark else "rgba(255, 255, 255, 0.55)",
-    "text": "#e5e7eb" if dark else "#0f172a",
+    "text": page_text,
     "border": palette["border"],
     "accent": accent,
     "shades": sh,
@@ -737,5 +789,4 @@ with tabs[5]:
         mime="text/csv",
     )
 
-# Extra bottom safe-space so Streamlit Cloud "Manage app" never overlaps content
 st.markdown("<div style='height: 6rem;'></div>", unsafe_allow_html=True)
