@@ -59,10 +59,6 @@ def is_dark_hex(hex_color: str) -> bool:
         return True
 
 def is_dark_gradient(hex_a: str, hex_b: str) -> bool:
-    """
-    Decide whether the overall gradient should be treated as dark.
-    Uses average luminance of the two endpoints.
-    """
     try:
         lum_a = _relative_luminance(_hex_to_rgb(hex_a))
         lum_b = _relative_luminance(_hex_to_rgb(hex_b))
@@ -82,7 +78,6 @@ def apply_background_and_theme_css(
     if mode == "Solid":
         dark = is_dark_hex(solid_hex)
     elif mode == "Gradient":
-        # Use computed darkness from chosen gradient colors
         dark = True if gradient_dark is None else gradient_dark
     else:
         dark = True
@@ -106,57 +101,69 @@ def apply_background_and_theme_css(
     option_selected_text = "#ffffff" if dark else "#0f172a"
     focus_ring = "rgba(148, 163, 184, 0.40)" if dark else "rgba(15, 23, 42, 0.25)"
 
-    # ---------------- BACKGROUND LAYERING ----------------
-    solid_bg_rule = f"background: {solid_hex} !important;"
-    gradient_bg_rule = f"background: {gradient_css} !important;"
-    image_bg_rule = (
-        f"""
-        background-image: url("data:{image_mime};base64,{image_b64}") !important;
-        background-size: cover !important;
-        background-position: center !important;
-        background-repeat: no-repeat !important;
-        """
-        if image_b64
-        else "background: #0f172a !important;"
-    )
-
+    # ---------------- BACKGROUND (FULL PAGE) ----------------
     if mode == "Solid":
-        bg_rule = solid_bg_rule
+        page_bg_rule = f"background: {solid_hex} !important;"
     elif mode == "Gradient":
-        bg_rule = gradient_bg_rule
+        page_bg_rule = f"background: {gradient_css} !important;"
     else:
-        bg_rule = image_bg_rule
+        page_bg_rule = (
+            f"""
+            background-image: url("data:{image_mime};base64,{image_b64}") !important;
+            background-size: cover !important;
+            background-position: center !important;
+            background-repeat: no-repeat !important;
+            """
+            if image_b64
+            else "background: #0f172a !important;"
+        )
 
     st.markdown(
         f"""
         <style>
+        /* Keep header so sidebar toggle works */
         header[data-testid="stHeader"] {{
             background: transparent !important;
         }}
 
+        /* Hide deploy / repo controls only */
         [data-testid="stDeployButton"],
         [data-testid="stStatusWidget"],
         [data-testid="stToolbarActions"] {{
             display: none !important;
         }}
 
-        [data-testid="stAppViewContainer"] {{
-            position: relative;
+        /* ---- Force Streamlit surfaces transparent so the page background is visible ---- */
+        html, body {{
+            background: transparent !important;
+        }}
+        [data-testid="stAppViewContainer"],
+        [data-testid="stAppViewContainer"] > .main {{
+            background: transparent !important;
         }}
 
-        /* True background layer */
-        [data-testid="stAppViewContainer"]::before {{
+        /* ---- True full screen background layer ---- */
+        body::before {{
             content: "";
             position: fixed;
             inset: 0;
-            z-index: -1;
-            {bg_rule}
+            z-index: 0;
+            {page_bg_rule}
+            pointer-events: none;
         }}
 
+        /* Ensure app renders above background */
+        [data-testid="stAppViewContainer"] {{
+            position: relative;
+            z-index: 1;
+        }}
+
+        /* Layout padding */
         [data-testid="stAppViewContainer"] > .main {{
             padding-top: 0rem;
         }}
 
+        /* Content panel */
         .block-container {{
             background: {card_bg};
             border: 1px solid {border};
@@ -165,6 +172,7 @@ def apply_background_and_theme_css(
             backdrop-filter: blur(8px);
         }}
 
+        /* Global text */
         html, body, [data-testid="stAppViewContainer"] * {{
             color: {text};
         }}
@@ -173,33 +181,39 @@ def apply_background_and_theme_css(
             color: {muted};
         }}
 
+        /* Sidebar panel */
         section[data-testid="stSidebar"] > div {{
             background: {card_bg};
             border-right: 1px solid {border};
         }}
 
+        /* Select input (closed state) */
         div[data-baseweb="select"] > div {{
             background: {widget_bg} !important;
             border: 1px solid {border} !important;
         }}
 
+        /* IMPORTANT: do NOT style file inputs, it can break Streamlit uploader */
         textarea, input:not([type="file"]) {{
             background: {widget_bg} !important;
             border: 1px solid {border} !important;
         }}
 
+        /* Uploader dropzone */
         [data-testid="stFileUploaderDropzone"] {{
             background: {widget_bg};
             border: 1px dashed {border};
             border-radius: 12px;
         }}
 
+        /* Expanders */
         details {{
             background: {widget_bg};
             border: 1px solid {border};
             border-radius: 12px;
         }}
 
+        /* Metric cards */
         [data-testid="stMetric"] {{
             background: {widget_bg};
             border: 1px solid {border};
@@ -207,12 +221,14 @@ def apply_background_and_theme_css(
             padding: 0.6rem;
         }}
 
+        /* Dataframe container */
         [data-testid="stDataFrame"] {{
             border: 1px solid {border};
             border-radius: 12px;
             overflow: hidden;
         }}
 
+        /* Code blocks */
         pre, code {{
             background: {widget_bg} !important;
             border: 1px solid {border} !important;
@@ -365,7 +381,6 @@ if bg_mode == "Solid":
     if custom_solid and custom_solid.strip().startswith("#") and len(custom_solid.strip()) in (4, 7):
         solid_hex = custom_solid.strip()
 
-# Build true gradient CSS from user inputs
 gradient_css = f"linear-gradient({gradient_angle}deg, {gradient_color_a} 0%, {gradient_color_b} 100%)"
 gradient_dark = is_dark_gradient(gradient_color_a, gradient_color_b)
 
