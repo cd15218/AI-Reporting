@@ -424,6 +424,11 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, sidebar_icon_ur
         }}
         """
 
+    # High contrast dropdown/menu colors
+    select_value_color = "#e5e7eb" if dark_mode else "#0f172a"
+    select_placeholder_color = "#cbd5e1" if dark_mode else "#334155"
+    menu_text_color = "#e5e7eb" if dark_mode else "#0f172a"
+
     sidebar_bg = "rgba(2, 6, 23, 0.78)" if dark_mode else "rgba(255, 255, 255, 0.92)"
     sidebar_border = palette["border"]
     sidebar_widget_bg = "rgba(255,255,255,0.10)" if dark_mode else "rgba(15,23,42,0.06)"
@@ -469,30 +474,74 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, sidebar_icon_ur
             padding: 0 !important;
         }}
 
-        /* Main widgets */
-        div[data-baseweb="select"] > div,
-        textarea, input:not([type="file"]) {{
+        /* Selectbox input text and placeholder should always be readable */
+        div[data-baseweb="select"] > div {{
             background: {palette["widget_bg"]} !important;
             border: 1px solid {palette["border"]} !important;
-            color: {palette["widget_text"]} !important;
+        }}
+        div[data-baseweb="select"] input {{
+            color: {select_value_color} !important;
+            -webkit-text-fill-color: {select_value_color} !important;
         }}
         div[data-baseweb="select"] span {{
-            color: {palette["widget_text"]} !important;
+            color: {select_value_color} !important;
+        }}
+        div[data-baseweb="select"] [aria-placeholder="true"],
+        div[data-baseweb="select"] [data-baseweb="placeholder"] {{
+            color: {select_placeholder_color} !important;
         }}
 
+        /* Dropdown menu text should always be readable */
         div[data-baseweb="popover"] div[data-baseweb="menu"] {{
             background: {palette["menu_bg"]} !important;
             border: 1px solid {palette["border"]} !important;
             border-radius: 12px !important;
         }}
         div[data-baseweb="popover"] div[data-baseweb="menu"] * {{
-            color: {palette["menu_text"]} !important;
+            color: {menu_text_color} !important;
         }}
         div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"]:hover {{
             background: {palette["hover_bg"]} !important;
         }}
 
-        /* Sidebar: compact but readable */
+        textarea, input:not([type="file"]) {{
+            background: {palette["widget_bg"]} !important;
+            border: 1px solid {palette["border"]} !important;
+            color: {select_value_color} !important;
+            -webkit-text-fill-color: {select_value_color} !important;
+        }}
+
+        div[data-baseweb="select"] > div:focus-within {{
+            box-shadow: 0 0 0 3px {palette["focus_ring"]} !important;
+        }}
+
+        [data-testid="stFileUploaderDropzone"] {{
+            background: {palette["widget_bg"]};
+            border: 1px dashed {palette["border"]};
+            border-radius: 12px;
+            padding: 0.65rem !important;
+        }}
+        [data-testid="stFileUploaderDropzone"] * {{
+            color: {select_value_color} !important;
+        }}
+
+        [data-testid="stMetric"] {{
+            background: {palette["widget_bg"]};
+            border: 1px solid {palette["border"]};
+            border-radius: 14px;
+            padding: 0.6rem;
+        }}
+
+        button[kind="primary"], button[kind="secondary"], .stButton>button {{
+            background: {palette["button_bg"]} !important;
+            border: 1px solid {palette["border"]} !important;
+            color: {palette["button_text"]} !important;
+        }}
+        .stButton>button:hover {{
+            background: {palette["button_hover_bg"]} !important;
+        }}
+
+        /* Sidebar: compact but readable + high contrast widgets */
         section[data-testid="stSidebar"] {{
             background: {sidebar_bg} !important;
             border-right: 1px solid {sidebar_border} !important;
@@ -522,25 +571,35 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, sidebar_icon_ur
         section[data-testid="stSidebar"] .stMarkdown li {{
             color: {muted} !important;
         }}
+
         section[data-testid="stSidebar"] div[data-baseweb="select"] > div,
         section[data-testid="stSidebar"] textarea,
         section[data-testid="stSidebar"] input:not([type="file"]) {{
             background: {sidebar_widget_bg} !important;
             border: 1px solid {sidebar_border} !important;
-            color: {text} !important;
+            color: {select_value_color} !important;
+            -webkit-text-fill-color: {select_value_color} !important;
         }}
         section[data-testid="stSidebar"] div[data-baseweb="select"] span {{
-            color: {text} !important;
+            color: {select_value_color} !important;
         }}
         section[data-testid="stSidebar"] div[data-baseweb="popover"] div[data-baseweb="menu"] {{
             background: {palette["menu_bg"]} !important;
             border: 1px solid {sidebar_border} !important;
         }}
         section[data-testid="stSidebar"] div[data-baseweb="popover"] div[data-baseweb="menu"] * {{
-            color: {palette["menu_text"]} !important;
+            color: {menu_text_color} !important;
         }}
         section[data-testid="stSidebar"] div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"]:hover {{
             background: {sidebar_hover} !important;
+        }}
+
+        section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] {{
+            background: {sidebar_widget_bg} !important;
+            border: 1px dashed {sidebar_border} !important;
+        }}
+        section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] * {{
+            color: {select_value_color} !important;
         }}
 
         {icon_css}
@@ -572,7 +631,7 @@ if "max_preview_rows_main" not in st.session_state:
     st.session_state["max_preview_rows_main"] = 25
 
 # ---------------------------
-# Sidebar: compact sections via expanders + only working anchors
+# Sidebar: compact sections via expanders
 # ---------------------------
 
 with st.sidebar:
@@ -580,6 +639,8 @@ with st.sidebar:
         st.selectbox("Background Type", ["Solid", "Gradient", "Image"], index=1, key="bg_mode")
 
         if st.session_state["bg_mode"] == "Solid":
+            # Solid Color selector moved ABOVE palette dropdown
+            st.color_picker("Solid Color", value=st.session_state.get("solid_picker", "#0f172a"), key="solid_picker")
             st.selectbox(
                 "Solid Palette",
                 list(SOLID_PALETTES.keys()),
@@ -589,7 +650,6 @@ with st.sidebar:
                 key="solid_choice",
                 on_change=_sync_solid_picker,
             )
-            st.color_picker("Solid Color", value=st.session_state.get("solid_picker", "#0f172a"), key="solid_picker")
 
         elif st.session_state["bg_mode"] == "Gradient":
             st.caption("Real gradient background.")
@@ -704,7 +764,7 @@ theme = {
 }
 
 # ---------------------------
-# Title + description + working Jump To (top)
+# Title + description
 # ---------------------------
 
 st.markdown("# Dataset Reporting")
@@ -721,10 +781,14 @@ st.markdown(
     """
 )
 
+# Standard section spacing amount (same padding before each main section)
+SECTION_PAD = "<div style='height: 1.25rem;'></div>"
+
 # ---------------------------
 # Upload + preview
 # ---------------------------
 
+st.markdown(SECTION_PAD, unsafe_allow_html=True)
 st.markdown("<div id='upload'></div>", unsafe_allow_html=True)
 
 left_upload, _ = st.columns([2, 6], vertical_alignment="top")
@@ -761,12 +825,11 @@ if preview_dialog is not None and preview_clicked:
 numeric_cols = df.select_dtypes(include="number").columns.tolist()
 categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
 
-st.markdown("<div style='height: 1.25rem;'></div>", unsafe_allow_html=True)
-
 # ---------------------------
 # Key Statistics
 # ---------------------------
 
+st.markdown(SECTION_PAD, unsafe_allow_html=True)
 st.markdown("<div id='key-statistics'></div>", unsafe_allow_html=True)
 st.subheader("Key Statistics")
 
@@ -828,6 +891,7 @@ meta_cols[3].metric("Missing Cells", int(df.isna().sum().sum()))
 # Radial chart
 # ---------------------------
 
+st.markdown(SECTION_PAD, unsafe_allow_html=True)
 st.markdown("<div id='radial-breakdown'></div>", unsafe_allow_html=True)
 st.markdown("Radial Category Breakdown")
 rad_controls, rad_chart = st.columns([1, 2])
@@ -884,8 +948,10 @@ with rad_chart:
         st.info("Add a categorical column to see the radial chart.")
 
 # ---------------------------
-# Tabs (no Jump To anchors here, because tabs won't auto-open via hash links)
+# Tabs (apply same padding above tabs as above Key Statistics)
 # ---------------------------
+
+st.markdown(SECTION_PAD, unsafe_allow_html=True)
 
 tabs = st.tabs(["Tables", "Distribution", "Scatter Plot", "Bar Chart", "Heatmap", "Export"])
 
