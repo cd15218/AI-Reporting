@@ -94,22 +94,28 @@ def apply_background_and_theme_css(
     option_selected_text = "#ffffff" if dark else "#0f172a"
     focus_ring = "rgba(148, 163, 184, 0.40)" if dark else "rgba(15, 23, 42, 0.25)"
 
-    # ---------------- BACKGROUND CSS ----------------
+    # ---------------- BACKGROUND LAYERING ----------------
+    # We render backgrounds via a fixed pseudo element, because on some Streamlit builds
+    # applying gradient backgrounds directly to containers can behave like a flat fill.
+    solid_bg_rule = f"background: {solid_hex} !important;"
+    gradient_bg_rule = f"background: {gradient_css} !important;"
+    image_bg_rule = (
+        f"""
+        background-image: url("data:{image_mime};base64,{image_b64}") !important;
+        background-size: cover !important;
+        background-position: center !important;
+        background-repeat: no-repeat !important;
+        """
+        if image_b64
+        else "background: #0f172a !important;"
+    )
+
     if mode == "Solid":
-        bg_css = f"background: {solid_hex} !important;"
+        bg_rule = solid_bg_rule
     elif mode == "Gradient":
-        bg_css = f"background: {gradient_css} !important;"
+        bg_rule = gradient_bg_rule
     else:
-        bg_css = (
-            f"""
-            background-image: url("data:{image_mime};base64,{image_b64}") !important;
-            background-size: cover !important;
-            background-position: center !important;
-            background-repeat: no-repeat !important;
-            """
-            if image_b64
-            else "background: #0f172a !important;"
-        )
+        bg_rule = image_bg_rule
 
     st.markdown(
         f"""
@@ -124,12 +130,22 @@ def apply_background_and_theme_css(
             display: none !important;
         }}
 
-        html, body, [data-testid="stAppViewContainer"] {{
-            {bg_css}
+        /* Ensure the app container can host the fixed background layer */
+        [data-testid="stAppViewContainer"] {{
+            position: relative;
         }}
 
+        /* True background layer (solid / gradient / image) */
+        [data-testid="stAppViewContainer"]::before {{
+            content: "";
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            {bg_rule}
+        }}
+
+        /* Main content area */
         [data-testid="stAppViewContainer"] > .main {{
-            {bg_css}
             padding-top: 0rem;
         }}
 
@@ -154,6 +170,7 @@ def apply_background_and_theme_css(
             border-right: 1px solid {border};
         }}
 
+        /* Select input (closed state) */
         div[data-baseweb="select"] > div {{
             background: {widget_bg} !important;
             border: 1px solid {border} !important;
