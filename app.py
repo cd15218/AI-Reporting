@@ -311,31 +311,28 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, icon_uri: str):
             display: none !important;
         }}
 
-        /* Circular theme button */
-        #theme_icon_wrap div[data-testid="stButton"] > button {{
-            width: 54px !important;
-            height: 54px !important;
+        /* Circular paint button (bigger) */
+        #paint_btn_wrap div[data-testid="stButton"] > button {{
+            width: 62px !important;
+            height: 62px !important;
             padding: 0 !important;
             border-radius: 999px !important;
             border: 1px solid {palette["border"]} !important;
             background: {palette["widget_bg"]} !important;
-            box-shadow: none !important;
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
             font-size: 0 !important;
             line-height: 0 !important;
         }}
-
-        #theme_icon_wrap div[data-testid="stButton"] > button:hover {{
+        #paint_btn_wrap div[data-testid="stButton"] > button:hover {{
             background: {palette["button_hover_bg"]} !important;
         }}
-
-        #theme_icon_wrap div[data-testid="stButton"] > button::before {{
+        #paint_btn_wrap div[data-testid="stButton"] > button::before {{
             content: "" !important;
             display: block !important;
-            width: 30px !important;
-            height: 30px !important;
+            width: 36px !important;
+            height: 36px !important;
             background-image: url("{icon_uri}") !important;
             background-size: contain !important;
             background-repeat: no-repeat !important;
@@ -418,11 +415,14 @@ if "theme_open" not in st.session_state:
     st.session_state.theme_open = False
 
 with header_right:
-    st.markdown("<div id='theme_icon_wrap'></div>", unsafe_allow_html=True)
-    if st.button("Theme", key="theme_toggle_btn", help="Theme"):
+    st.markdown("<div id='paint_btn_wrap'>", unsafe_allow_html=True)
+    clicked = st.button(" ", key="paint_toggle_btn", help="Appearance")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    if clicked:
         st.session_state.theme_open = not st.session_state.theme_open
 
-    # The actual panel (summary hidden by CSS, so no arrow / box)
+    # Actual panel (summary hidden by CSS, so no arrow / long box is shown)
     with st.expander(" ", expanded=st.session_state.theme_open):
         bg_mode = st.selectbox("Background Type", ["Solid", "Gradient", "Image"], index=1, key="bg_mode_top")
 
@@ -522,7 +522,7 @@ palette = {
     "button_text": button_text,
 }
 
-# Create icon as base64 SVG with current page text color
+# Create icon as base64 SVG using current text color (so it stays readable)
 paint_svg = f"""
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
   <path d="M12 3c-4.97 0-9 3.58-9 8 0 2.95 1.89 5.52 4.66 6.97.63.33 1.34.03 1.63-.63l.54-1.25c.2-.47.66-.78 1.17-.78h1.77c1.1 0 1.99.89 1.99 1.99v1.55c0 .62.5 1.13 1.12 1.13C20.64 19.99 21 15.4 21 11c0-4.42-4.03-8-9-8Z"
@@ -609,6 +609,14 @@ with f3:
         label_visibility="collapsed",
     )
     st.caption("Preview Rows")
+
+try:
+    @st.dialog("Dataset Preview")
+    def preview_dialog(df_to_show: pd.DataFrame, rows: int):
+        st.dataframe(df_to_show.head(rows), use_container_width=True)
+        st.caption(f"Showing the first {rows} rows.")
+except Exception:
+    preview_dialog = None
 
 preview_clicked = st.button("Preview Dataset", key="preview_dataset_btn_top")
 if preview_dialog is not None and preview_clicked:
