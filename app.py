@@ -611,27 +611,27 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, sidebar_icon_ur
         /* Labels above dropdowns, sliders, etc */
         label[data-testid="stWidgetLabel"] p,
         label[data-testid="stWidgetLabel"] span,
-        label[data-testid="stWidgetLabel"] div {
+        label[data-testid="stWidgetLabel"] div {{
         color: {label_color} !important;
         -webkit-text-fill-color: {label_color} !important;
         opacity: 1 !important;
-        }
+        }}
 
         /* Selected value inside dropdown control */
         div[data-baseweb="select"] > div *,
-        section[data-testid="stSidebar"] div[data-baseweb="select"] > div * {
+        section[data-testid="stSidebar"] div[data-baseweb="select"] > div * {{
         color: {select_value_color} !important;
         -webkit-text-fill-color: {select_value_color} !important;
         opacity: 1 !important;
-        }
+        }}
 
         /* Dropdown menu options */
         div[data-baseweb="popover"] div[data-baseweb="menu"] *,
-        section[data-testid="stSidebar"] div[data-baseweb="popover"] div[data-baseweb="menu"] * {
+        section[data-testid="stSidebar"] div[data-baseweb="popover"] div[data-baseweb="menu"] * {{
         color: {menu_text_color} !important;
         -webkit-text-fill-color: {menu_text_color} !important;
         opacity: 1 !important;
-        }
+        }}
         </style>
         """,
         unsafe_allow_html=True,
