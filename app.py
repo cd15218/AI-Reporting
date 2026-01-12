@@ -69,11 +69,9 @@ def apply_background_and_theme_css(
     # ---------------- THEME DECISION ----------------
     if mode == "Solid":
         dark = is_dark_hex(solid_hex)
-
     elif mode == "Gradient":
         LIGHT_GRADIENTS = {"Light Studio"}
         dark = gradient_name not in LIGHT_GRADIENTS
-
     else:
         dark = True
 
@@ -88,14 +86,13 @@ def apply_background_and_theme_css(
     plot_paper_bg = "rgba(2, 6, 23, 0.18)" if dark else "rgba(255, 255, 255, 0.80)"
     plot_plot_bg = "rgba(2, 6, 23, 0.06)" if dark else "rgba(255, 255, 255, 0.55)"
 
-    # Dropdown menu colors (BaseWeb)
-    # Fixes Light Studio hover/selected states where bg + text can match.
-    select_menu_bg = "rgba(15, 23, 42, 0.96)" if dark else "rgba(255, 255, 255, 0.98)"
-    select_item_text = "#e5e7eb" if dark else "#0f172a"
-    select_item_hover_bg = "rgba(148, 163, 184, 0.22)" if dark else "rgba(15, 23, 42, 0.10)"
-    select_item_hover_text = "#e5e7eb" if dark else "#0f172a"
-    select_item_selected_bg = "rgba(148, 163, 184, 0.30)" if dark else "rgba(15, 23, 42, 0.14)"
-    select_item_selected_text = "#ffffff" if dark else "#0f172a"
+    # BaseWeb Select menu colors
+    menu_bg = "rgba(15, 23, 42, 0.96)" if dark else "rgba(255, 255, 255, 0.98)"
+    option_text = "#e5e7eb" if dark else "#0f172a"
+    option_hover_bg = "rgba(148, 163, 184, 0.22)" if dark else "rgba(15, 23, 42, 0.10)"
+    option_selected_bg = "rgba(148, 163, 184, 0.30)" if dark else "rgba(15, 23, 42, 0.14)"
+    option_selected_text = "#ffffff" if dark else "#0f172a"
+    focus_ring = "rgba(148, 163, 184, 0.40)" if dark else "rgba(15, 23, 42, 0.25)"
 
     # ---------------- BACKGROUND CSS ----------------
     if mode == "Solid":
@@ -117,12 +114,10 @@ def apply_background_and_theme_css(
     st.markdown(
         f"""
         <style>
-        /* Keep header so sidebar toggle works */
         header[data-testid="stHeader"] {{
             background: transparent !important;
         }}
 
-        /* Hide deploy / repo controls only */
         [data-testid="stDeployButton"],
         [data-testid="stStatusWidget"],
         [data-testid="stToolbarActions"] {{
@@ -138,7 +133,6 @@ def apply_background_and_theme_css(
             padding-top: 0rem;
         }}
 
-        /* Content panel */
         .block-container {{
             background: {card_bg};
             border: 1px solid {border};
@@ -147,7 +141,6 @@ def apply_background_and_theme_css(
             backdrop-filter: blur(8px);
         }}
 
-        /* Global text */
         html, body, [data-testid="stAppViewContainer"] * {{
             color: {text};
         }}
@@ -156,13 +149,11 @@ def apply_background_and_theme_css(
             color: {muted};
         }}
 
-        /* Sidebar panel */
         section[data-testid="stSidebar"] > div {{
             background: {card_bg};
             border-right: 1px solid {border};
         }}
 
-        /* Select input (closed state) */
         div[data-baseweb="select"] > div {{
             background: {widget_bg} !important;
             border: 1px solid {border} !important;
@@ -174,21 +165,18 @@ def apply_background_and_theme_css(
             border: 1px solid {border} !important;
         }}
 
-        /* Uploader dropzone */
         [data-testid="stFileUploaderDropzone"] {{
             background: {widget_bg};
             border: 1px dashed {border};
             border-radius: 12px;
         }}
 
-        /* Expanders */
         details {{
             background: {widget_bg};
             border: 1px solid {border};
             border-radius: 12px;
         }}
 
-        /* Metric cards */
         [data-testid="stMetric"] {{
             background: {widget_bg};
             border: 1px solid {border};
@@ -196,53 +184,50 @@ def apply_background_and_theme_css(
             padding: 0.6rem;
         }}
 
-        /* Dataframe container */
         [data-testid="stDataFrame"] {{
             border: 1px solid {border};
             border-radius: 12px;
             overflow: hidden;
         }}
 
-        /* Code blocks */
         pre, code {{
             background: {widget_bg} !important;
             border: 1px solid {border} !important;
             border-radius: 10px !important;
         }}
 
-        /* ---------------- BaseWeb Select dropdown menu fixes ----------------
-           Streamlit's selectbox uses BaseWeb. These rules make menu items readable
-           on Light Studio (and stay fine on dark themes).
-        */
-
-        /* Menu panel background */
-        ul[role="listbox"] {{
-            background: {select_menu_bg} !important;
+        /* BaseWeb Select dropdown menu (actual Streamlit DOM) */
+        div[data-baseweb="popover"] div[data-baseweb="menu"] {{
+            background: {menu_bg} !important;
             border: 1px solid {border} !important;
             border-radius: 12px !important;
+            overflow: hidden !important;
         }}
 
-        /* Each option (normal) */
-        li[role="option"] {{
-            color: {select_item_text} !important;
+        div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"] {{
+            color: {option_text} !important;
+            background: transparent !important;
         }}
 
-        /* Hover / active option */
-        li[role="option"]:hover,
-        li[role="option"][aria-selected="false"]:hover {{
-            background: {select_item_hover_bg} !important;
-            color: {select_item_hover_text} !important;
+        div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"]:hover,
+        div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"][data-highlighted="true"],
+        div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"][aria-selected="false"][data-highlighted="true"] {{
+            background: {option_hover_bg} !important;
+            color: {option_text} !important;
         }}
 
-        /* Selected option */
-        li[role="option"][aria-selected="true"] {{
-            background: {select_item_selected_bg} !important;
-            color: {select_item_selected_text} !important;
+        div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"][aria-selected="true"] {{
+            background: {option_selected_bg} !important;
+            color: {option_selected_text} !important;
+            font-weight: 600 !important;
         }}
 
-        /* Ensure text spans inside options inherit correctly */
-        li[role="option"] * {{
+        div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"] * {{
             color: inherit !important;
+        }}
+
+        div[data-baseweb="select"] > div:focus-within {{
+            box-shadow: 0 0 0 3px {focus_ring} !important;
         }}
         </style>
         """,
