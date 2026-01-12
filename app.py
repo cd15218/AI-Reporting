@@ -421,14 +421,14 @@ except Exception:
 
 st.divider()
 
-# ---------------- KEY STATISTICS + RADIAL VISUAL ----------------
+# ---------------- KEY STATISTICS ----------------
 
 st.subheader("Key Statistics")
 
-# 3 column layout: selector, metrics, radial chart
-left, mid, right = st.columns([1, 2, 2])
+# KPI selector row
+kpi_left, kpi_right = st.columns([1, 3])
 
-with left:
+with kpi_left:
     default_kpi_index = 1 if len(numeric_cols) > 0 else 0
     primary_numeric = st.selectbox(
         "Primary Numeric Column (KPIs)",
@@ -457,7 +457,7 @@ summary, visuals_kpi, numeric_df, categorical_df = build_visuals(
     max_categories=max_categories
 )
 
-with mid:
+with kpi_right:
     k1, k2, k3, k4 = st.columns(4)
 
     if summary["primary_numeric_column"]:
@@ -478,9 +478,12 @@ with mid:
     k7.metric("Categorical Columns", summary["categorical_count"])
     k8.metric("Missing Cells", summary["missing_cells"])
 
-with right:
-    st.markdown("Radial Category Breakdown")
+# Radial section under the KPI metrics
+st.markdown("Radial Category Breakdown")
 
+rad_controls, rad_chart = st.columns([1, 2])
+
+with rad_controls:
     default_cat_index = 1 if len(categorical_cols) > 0 else 0
     radial_col_kpi = st.selectbox(
         "Category Column",
@@ -512,6 +515,7 @@ with right:
                 key="kpi_radial_value_col"
             )
 
+with rad_chart:
     if radial_col_kpi != "None" and len(categorical_cols) > 0:
         radial_mode = "sum" if radial_mode_label == "Sum of Numeric Column" else "count"
 
