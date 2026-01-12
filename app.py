@@ -206,7 +206,11 @@ def apply_css(bg_css: str, dark: bool, palette: dict):
         }}
 
         [data-testid="stAppViewContainer"] {{ background-color: transparent !important; }}
-        [data-testid="stAppViewContainer"] > .main {{ background-color: transparent !important; padding-top: 0rem; }}
+        [data-testid="stAppViewContainer"] > .main {{
+            background-color: transparent !important;
+            padding-top: 0rem !important;
+            padding-bottom: 6.5rem !important; /* prevents Streamlit Cloud footer pill overlap */
+        }}
 
         .block-container {{
             background: {palette["card_bg"]};
@@ -394,7 +398,6 @@ with left:
 
 with right:
     file_top = st.file_uploader("Upload Dataset", type=["csv", "xlsx", "xls"], key="data_upload_top")
-    # Preview button appears under the upload, but only after upload exists
     preview_clicked = False
 
     try:
@@ -406,7 +409,6 @@ with right:
         if file_top is not None:
             preview_clicked = st.button("Preview Dataset", key="preview_dataset_btn_top")
     except Exception:
-        # If st.dialog isn't available, we still show an expander below later if needed
         pass
 
 uploaded = file_top if file_top is not None else file_sidebar
@@ -420,7 +422,6 @@ except Exception as e:
     st.error(f"Could not read the file. {e}")
     st.stop()
 
-# If preview button clicked (dialog supported), show preview
 try:
     if file_top is not None and preview_clicked:
         preview_dialog(df, max_preview_rows)
@@ -559,7 +560,7 @@ with rad_chart:
         st.info("No categorical columns found for a radial chart.")
 
 # ---------------------------
-# Tabs after Key Statistics (no preview tab, no visualizations tab)
+# Tabs after Key Statistics
 # ---------------------------
 
 tabs = st.tabs(
@@ -696,3 +697,6 @@ with tabs[5]:
         file_name="report_data.csv",
         mime="text/csv",
     )
+
+# Extra bottom safe-space so Streamlit Cloud "Manage app" never overlaps content
+st.markdown("<div style='height: 6rem;'></div>", unsafe_allow_html=True)
