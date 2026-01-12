@@ -14,7 +14,7 @@ st.set_page_config(
 )
 
 # ---------------------------
-# Small, reusable helpers
+# Small helpers
 # ---------------------------
 
 def read_df(uploaded_file) -> pd.DataFrame:
@@ -270,6 +270,26 @@ def apply_css(bg_css: str, dark: bool, palette: dict):
         unsafe_allow_html=True,
     )
 
+def ensure(key: str, value):
+    if key not in st.session_state:
+        st.session_state[key] = value
+
+def compute_numeric_stats(df: pd.DataFrame, col: str) -> dict:
+    """
+    Guaranteed-correct stats based on the actual df values.
+    """
+    s = pd.to_numeric(df[col], errors="coerce")
+    s = s.dropna()
+    if s.empty:
+        return {"sum": "N/A", "mean": "N/A", "median": "N/A", "min": "N/A", "max": "N/A"}
+    return {
+        "sum": float(s.sum()),
+        "mean": float(s.mean()),
+        "median": float(s.median()),
+        "min": float(s.min()),
+        "max": float(s.max()),
+    }
+
 # ---------------------------
 # Sidebar
 # ---------------------------
@@ -401,22 +421,18 @@ except Exception as e:
 numeric_cols = df.select_dtypes(include="number").columns.tolist()
 categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
 
-def ensure(key: str, value):
-    if key not in st.session_state:
-        st.session_state[key] = value
-
+# Defaults that don't start as None when possible
 ensure("scatter_x", numeric_cols[0] if len(numeric_cols) >= 1 else "None")
 ensure("scatter_y", numeric_cols[1] if len(numeric_cols) >= 2 else "None")
 ensure("cat_volume_col", categorical_cols[0] if len(categorical_cols) >= 1 else "None")
 ensure("cat_a", categorical_cols[0] if len(categorical_cols) >= 1 else "None")
 ensure("cat_b", categorical_cols[1] if len(categorical_cols) >= 2 else "None")
-ensure("radial_col", categorical_cols[0] if len(categorical_cols) >= 1 else "None")
-ensure("radial_mode", "Count")
-ensure("radial_value_col", numeric_cols[0] if len(numeric_cols) >= 1 else "None")
 ensure("radial_pick", [])
+ensure("kpi_radial_col", categorical_cols[0] if len(categorical_cols) >= 1 else "None")
+ensure("kpi_radial_mode", "Count")
 
 # ---------------------------
-# Key Statistics
+# Key Statistics (with radial chart included)
 # ---------------------------
 
 st.subheader("Key Statistics")
@@ -431,37 +447,35 @@ with kpi_left:
         key="kpi_primary_numeric",
     )
 
-user_choices_kpi = {
-    "primary_numeric": None if primary_numeric == "None" else primary_numeric,
-    "scatter_x": None,
-    "scatter_y": None,
-    "category_volume": None,
-    "category_a": None,
-    "category_b": None,
-    "radial_category_col": None,
-    "radial_categories": [],
-    "radial_mode": "count",
-    "radial_value_col": None,
-}
-
+# Build visuals once for KPI context + tables + distribution
 summary, visuals_kpi, numeric_df, categorical_df = build_visuals(
     df=df,
     report_type=report_type,
-    user_choices=user_choices_kpi,
+    user_choices={
+        "primary_numeric": None if primary_numeric == "None" else primary_numeric,
+        "scatter_x": None,
+        "scatter_y": None,
+        "category_volume": None,
+        "category_a": None,
+        "category_b": None,
+        "radial_category_col": None,
+        "radial_categories": [],
+        "radial_mode": "count",
+        "radial_value_col": None,
+    },
     max_categories=max_categories,
 )
 
 with kpi_right:
-    # Sum first, then average/median/min/max
     c1, c2, c3, c4, c5 = st.columns(5)
 
-    if summary.get("primary_numeric_column"):
-        col = summary["primary_numeric_column"]
-        c1.metric(f"Total {col}", summary.get("sum", "N/A"))
-        c2.metric(f"Average {col}", summary.get("mean", "N/A"))
-        c3.metric(f"Median {col}", summary.get("median", "N/A"))
-        c4.metric(f"Minimum {col}", summary.get("min", "N/A"))
-        c5.metric(f"Maximum {col}", summary.get("max", "N/A"))
+    if primary_numeric != "None":
+        stats = compute_numeric_stats(df, primary_numeric)
+        c1.metric(f"Total {primary_numeric}", stats["sum"])
+        c2.metric(f"Average {primary_numeric}", stats["mean"])
+        c3.metric(f"Median {primary_numeric}", stats["median"])
+        c4.metric(f"Minimum {primary_numeric}", stats["min"])
+        c5.metric(f"Maximum {primary_numeric}", stats["max"])
     else:
         c1.metric("Total", "N/A")
         c2.metric("Average", "N/A")
@@ -470,10 +484,72 @@ with kpi_right:
         c5.metric("Maximum", "N/A")
 
     r1, r2, r3, r4 = st.columns(4)
-    r1.metric("Total Rows", summary.get("rows", df.shape[0]))
-    r2.metric("Numeric Columns", summary.get("numeric_count", len(numeric_cols)))
-    r3.metric("Categorical Columns", summary.get("categorical_count", len(categorical_cols)))
-    r4.metric("Missing Cells", summary.get("missing_cells", int(df.isna().sum().sum())))
+    r1.metric("Total Rows", int(df.shape[0]))
+    r2.metric("Numeric Columns", int(len(numeric_cols)))
+    r3.metric("Categorical Columns", int(len(categorical_cols)))
+    r4.metric("Missing Cells", int(df.isna().sum().sum()))
+
+st.markdown("Radial Category Breakdown")
+
+rad_controls, rad_chart = st.columns([1, 2])
+
+with rad_controls:
+    default_cat_idx = 1 if len(categorical_cols) > 0 else 0
+    radial_col_kpi = st.selectbox(
+        "Category Column",
+        options=["None"] + categorical_cols,
+        index=default_cat_idx,
+        key="kpi_radial_col",
+    )
+
+    radial_mode_label = st.selectbox(
+        "Value Type",
+        options=["Count", "Sum of Numeric Column"],
+        index=0,
+        key="kpi_radial_mode",
+    )
+
+    radial_value_col_kpi = None
+    if radial_mode_label == "Sum of Numeric Column":
+        if numeric_cols:
+            default_num_idx = numeric_cols.index(primary_numeric) if primary_numeric in numeric_cols else 0
+            radial_value_col_kpi = st.selectbox(
+                "Numeric Column to Sum",
+                options=numeric_cols,
+                index=default_num_idx,
+                key="kpi_radial_value_col",
+            )
+        else:
+            st.info("No numeric columns available to sum.")
+
+with rad_chart:
+    if radial_col_kpi != "None" and categorical_cols:
+        radial_mode = "sum" if radial_mode_label == "Sum of Numeric Column" else "count"
+        _, visuals_radial_kpi, _, _ = build_visuals(
+            df=df,
+            report_type=report_type,
+            user_choices={
+                "primary_numeric": None if primary_numeric == "None" else primary_numeric,
+                "scatter_x": None,
+                "scatter_y": None,
+                "category_volume": None,
+                "category_a": None,
+                "category_b": None,
+                "radial_category_col": radial_col_kpi,
+                "radial_categories": [],
+                "radial_mode": radial_mode,
+                "radial_value_col": radial_value_col_kpi,
+            },
+            max_categories=max_categories,
+        )
+        fig = get_fig(visuals_radial_kpi, "radial_donut")
+        if fig is not None:
+            st.plotly_chart(force_theme(fig, theme), use_container_width=True, key="chart_kpi_radial_donut")
+            st.caption("Colors use different shades of the active theme accent.")
+        else:
+            st.info("Select a valid category column to generate the radial chart.")
+    else:
+        st.info("No categorical columns found for a radial chart.")
 
 # ---------------------------
 # Tabs for everything AFTER Key Statistics
@@ -481,90 +557,26 @@ with kpi_right:
 
 tabs = st.tabs(
     [
-        "Radial Breakdown",
         "Tables",
         "Distribution",
         "Dataset Preview",
-        "Visualizations",
+        "Scatter Plot",
+        "Bar Chart",
+        "Heatmap",
         "Export",
     ]
 )
 
-# ---- Tab 1: Radial Breakdown ----
+# ---- Tables ----
 with tabs[0]:
-    st.subheader("Radial Category Breakdown")
-
-    rad_controls, rad_chart = st.columns([1, 2])
-
-    with rad_controls:
-        default_cat_idx = 1 if len(categorical_cols) > 0 else 0
-        radial_col_kpi = st.selectbox(
-            "Category Column",
-            options=["None"] + categorical_cols,
-            index=default_cat_idx,
-            key="kpi_radial_col",
-        )
-
-        radial_mode_label = st.selectbox(
-            "Value Type",
-            options=["Count", "Sum of Numeric Column"],
-            index=0,
-            key="kpi_radial_mode",
-        )
-
-        radial_value_col_kpi = None
-        if radial_mode_label == "Sum of Numeric Column":
-            if numeric_cols:
-                default_num_idx = numeric_cols.index(primary_numeric) if primary_numeric in numeric_cols else 0
-                radial_value_col_kpi = st.selectbox(
-                    "Numeric Column to Sum",
-                    options=numeric_cols,
-                    index=default_num_idx,
-                    key="kpi_radial_value_col",
-                )
-            else:
-                st.info("No numeric columns available to sum.")
-
-    with rad_chart:
-        if radial_col_kpi != "None" and categorical_cols:
-            radial_mode = "sum" if radial_mode_label == "Sum of Numeric Column" else "count"
-            _, visuals_radial_kpi, _, _ = build_visuals(
-                df=df,
-                report_type=report_type,
-                user_choices={
-                    "primary_numeric": None if primary_numeric == "None" else primary_numeric,
-                    "scatter_x": None,
-                    "scatter_y": None,
-                    "category_volume": None,
-                    "category_a": None,
-                    "category_b": None,
-                    "radial_category_col": radial_col_kpi,
-                    "radial_categories": [],
-                    "radial_mode": radial_mode,
-                    "radial_value_col": radial_value_col_kpi,
-                },
-                max_categories=max_categories,
-            )
-            fig = get_fig(visuals_radial_kpi, "radial_donut")
-            if fig is not None:
-                st.plotly_chart(force_theme(fig, theme), use_container_width=True, key="chart_kpi_radial_donut")
-                st.caption("Colors use different shades of the active theme accent.")
-            else:
-                st.info("Select a valid category column to generate the radial chart.")
-        else:
-            st.info("No categorical columns found for a radial chart.")
-
-# ---- Tab 2: Tables ----
-with tabs[1]:
     st.subheader("Statistics Tables")
-    st.write("These tables summarize numeric and categorical columns.")
     st.dataframe(numeric_df, use_container_width=True)
     st.dataframe(categorical_df, use_container_width=True)
 
-# ---- Tab 3: Distribution ----
-with tabs[2]:
+# ---- Distribution ----
+with tabs[1]:
     st.subheader("Distribution")
-    if summary.get("primary_numeric_column"):
+    if primary_numeric != "None":
         fig = get_fig(visuals_kpi, "numeric_distribution")
         if fig is not None:
             st.plotly_chart(force_theme(fig, theme), use_container_width=True, key="chart_kpi_distribution")
@@ -573,8 +585,8 @@ with tabs[2]:
     else:
         st.info("Select a numeric column in Key Statistics to view a distribution chart.")
 
-# ---- Tab 4: Dataset Preview ----
-with tabs[3]:
+# ---- Dataset Preview ----
+with tabs[2]:
     st.subheader("Dataset Preview")
     st.caption(f"Dataset loaded: {df.shape[0]:,} rows • {df.shape[1]:,} columns")
 
@@ -598,12 +610,10 @@ with tabs[3]:
         st.dataframe(df.head(max_preview_rows), use_container_width=True)
         st.caption(f"Showing the first {max_preview_rows} rows.")
 
-# ---- Tab 5: Visualizations ----
-with tabs[4]:
-    st.subheader("Visualizations")
+# ---- Scatter Plot ----
+with tabs[3]:
+    st.subheader("Numeric Comparison Scatter Plot")
 
-    # Scatter
-    st.markdown("Numeric Comparison Scatter Plot")
     controls, chart = st.columns([1, 2])
     with controls:
         st.selectbox("X Axis (Numeric)", options=["None"] + numeric_cols, key="scatter_x")
@@ -626,6 +636,7 @@ with tabs[4]:
         },
         max_categories,
     )
+
     with chart:
         fig = get_fig(visuals, "numeric_scatter")
         if fig is not None:
@@ -633,10 +644,10 @@ with tabs[4]:
         else:
             st.info("Select two different numeric columns to generate the scatter plot.")
 
-    st.divider()
+# ---- Bar Chart ----
+with tabs[4]:
+    st.subheader("Category Distribution Bar Chart")
 
-    # Bar
-    st.markdown("Category Distribution Bar Chart")
     controls, chart = st.columns([1, 2])
     with controls:
         st.selectbox("Category Column", options=["None"] + categorical_cols, key="cat_volume_col")
@@ -658,6 +669,7 @@ with tabs[4]:
         },
         max_categories,
     )
+
     with chart:
         fig = get_fig(visuals, "category_volume")
         if fig is not None:
@@ -665,10 +677,10 @@ with tabs[4]:
         else:
             st.info("Select a categorical column to generate the bar chart.")
 
-    st.divider()
+# ---- Heatmap ----
+with tabs[5]:
+    st.subheader("Category Relationship Heatmap")
 
-    # Heatmap
-    st.markdown("Category Relationship Heatmap")
     controls, chart = st.columns([1, 2])
     with controls:
         st.selectbox("Category A", options=["None"] + categorical_cols, key="cat_a")
@@ -691,6 +703,7 @@ with tabs[4]:
         },
         max_categories,
     )
+
     with chart:
         fig = get_fig(visuals, "category_heatmap")
         if fig is not None:
@@ -698,62 +711,8 @@ with tabs[4]:
         else:
             st.info("Select two different categorical columns to generate the heatmap.")
 
-    st.divider()
-
-    # Radial (standalone control version)
-    st.markdown("Radial Category Donut Chart")
-    controls, chart = st.columns([1, 2])
-    with controls:
-        st.selectbox("Category Column", options=["None"] + categorical_cols, key="radial_col")
-
-        selected_col = st.session_state["radial_col"]
-        opts = []
-        if selected_col != "None":
-            opts = (
-                df[selected_col]
-                .astype("string")
-                .fillna("Missing")
-                .value_counts()
-                .head(max_categories)
-                .index
-                .tolist()
-            )
-
-        st.multiselect("Include Categories (Optional)", options=opts, default=st.session_state["radial_pick"], key="radial_pick")
-        st.selectbox("Value Type", ["Count", "Sum of Numeric Column"], key="radial_mode")
-
-        if st.session_state["radial_mode"] == "Sum of Numeric Column":
-            st.selectbox("Numeric Column to Sum", options=["None"] + numeric_cols, key="radial_value_col")
-        else:
-            st.session_state["radial_value_col"] = "None"
-
-    radial_mode = "sum" if st.session_state["radial_mode"] == "Sum of Numeric Column" else "count"
-    radial_value_col = None if st.session_state["radial_value_col"] == "None" else st.session_state["radial_value_col"]
-
-    _, visuals, _, _ = build_visuals(
-        df,
-        report_type,
-        {
-            "primary_numeric": None,
-            "scatter_x": None,
-            "scatter_y": None,
-            "category_volume": None,
-            "category_a": None,
-            "category_b": None,
-            "radial_category_col": None if st.session_state["radial_col"] == "None" else st.session_state["radial_col"],
-            "radial_categories": st.session_state["radial_pick"],
-            "radial_mode": radial_mode,
-            "radial_value_col": radial_value_col,
-        },
-        max_categories,
-    )
-    with chart:
-        fig = get_fig(visuals, "radial_donut")
-        if fig is not None:
-            st.plotly_chart(force_theme(fig, theme), use_container_width=True, key="chart_radial_donut")
-
-# ---- Tab 6: Export ----
-with tabs[5]:
+# ---- Export ----
+with tabs[6]:
     st.subheader("Export")
     st.write("Download your cleaned dataset for use in other visualization tools.")
     st.download_button(
