@@ -257,14 +257,6 @@ def apply_css(bg_css: str, dark: bool, palette: dict):
         div[data-baseweb="select"] > div:focus-within {{
             box-shadow: 0 0 0 3px {palette["focus_ring"]} !important;
         }}
-
-        .link-btn button {{
-            background: transparent !important;
-            border: none !important;
-            padding: 0 !important;
-            text-decoration: underline !important;
-            cursor: pointer !important;
-        }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -275,11 +267,7 @@ def ensure(key: str, value):
         st.session_state[key] = value
 
 def compute_numeric_stats(df: pd.DataFrame, col: str) -> dict:
-    """
-    Guaranteed-correct stats based on the actual df values.
-    """
-    s = pd.to_numeric(df[col], errors="coerce")
-    s = s.dropna()
+    s = pd.to_numeric(df[col], errors="coerce").dropna()
     if s.empty:
         return {"sum": "N/A", "mean": "N/A", "median": "N/A", "min": "N/A", "max": "N/A"}
     return {
@@ -378,7 +366,6 @@ palette = {
     "hover_bg": "rgba(148, 163, 184, 0.22)" if dark else "rgba(15, 23, 42, 0.10)",
     "focus_ring": "rgba(148, 163, 184, 0.40)" if dark else "rgba(15, 23, 42, 0.25)",
 }
-
 apply_css(bg_css, dark, palette)
 
 plotly_template = "plotly_dark" if dark else "plotly_white"
@@ -397,15 +384,30 @@ theme = {
 }
 
 # ---------------------------
-# Title and upload
+# Title and upload + preview button under uploader
 # ---------------------------
 
 left, right = st.columns([3, 2], vertical_alignment="center")
 with left:
     st.markdown("# Dataset Reporting")
-    st.write("Upload a CSV or Excel file to generate key statistics and visualizations.")
+    st.write("Upload a CSV or Excel file to generate key statistics and charts.")
+
 with right:
     file_top = st.file_uploader("Upload Dataset", type=["csv", "xlsx", "xls"], key="data_upload_top")
+    # Preview button appears under the upload, but only after upload exists
+    preview_clicked = False
+
+    try:
+        @st.dialog("Dataset Preview")
+        def preview_dialog(df_to_show: pd.DataFrame, rows: int):
+            st.dataframe(df_to_show.head(rows), use_container_width=True)
+            st.caption(f"Showing the first {rows} rows.")
+
+        if file_top is not None:
+            preview_clicked = st.button("Preview Dataset", key="preview_dataset_btn_top")
+    except Exception:
+        # If st.dialog isn't available, we still show an expander below later if needed
+        pass
 
 uploaded = file_top if file_top is not None else file_sidebar
 if not uploaded:
@@ -418,10 +420,16 @@ except Exception as e:
     st.error(f"Could not read the file. {e}")
     st.stop()
 
+# If preview button clicked (dialog supported), show preview
+try:
+    if file_top is not None and preview_clicked:
+        preview_dialog(df, max_preview_rows)
+except Exception:
+    pass
+
 numeric_cols = df.select_dtypes(include="number").columns.tolist()
 categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
 
-# Defaults that don't start as None when possible
 ensure("scatter_x", numeric_cols[0] if len(numeric_cols) >= 1 else "None")
 ensure("scatter_y", numeric_cols[1] if len(numeric_cols) >= 2 else "None")
 ensure("cat_volume_col", categorical_cols[0] if len(categorical_cols) >= 1 else "None")
@@ -447,7 +455,6 @@ with kpi_left:
         key="kpi_primary_numeric",
     )
 
-# Build visuals once for KPI context + tables + distribution
 summary, visuals_kpi, numeric_df, categorical_df = build_visuals(
     df=df,
     report_type=report_type,
@@ -552,14 +559,13 @@ with rad_chart:
         st.info("No categorical columns found for a radial chart.")
 
 # ---------------------------
-# Tabs for everything AFTER Key Statistics
+# Tabs after Key Statistics (no preview tab, no visualizations tab)
 # ---------------------------
 
 tabs = st.tabs(
     [
         "Tables",
         "Distribution",
-        "Dataset Preview",
         "Scatter Plot",
         "Bar Chart",
         "Heatmap",
@@ -567,13 +573,11 @@ tabs = st.tabs(
     ]
 )
 
-# ---- Tables ----
 with tabs[0]:
     st.subheader("Statistics Tables")
     st.dataframe(numeric_df, use_container_width=True)
     st.dataframe(categorical_df, use_container_width=True)
 
-# ---- Distribution ----
 with tabs[1]:
     st.subheader("Distribution")
     if primary_numeric != "None":
@@ -585,33 +589,7 @@ with tabs[1]:
     else:
         st.info("Select a numeric column in Key Statistics to view a distribution chart.")
 
-# ---- Dataset Preview ----
 with tabs[2]:
-    st.subheader("Dataset Preview")
-    st.caption(f"Dataset loaded: {df.shape[0]:,} rows • {df.shape[1]:,} columns")
-
-    try:
-        @st.dialog("Dataset Preview")
-        def preview_dialog(df_to_show: pd.DataFrame, rows: int):
-            st.dataframe(df_to_show.head(rows), use_container_width=True)
-            st.caption(f"Showing the first {rows} rows.")
-
-        c1, c2 = st.columns([1, 5], vertical_alignment="center")
-        with c1:
-            st.markdown('<div class="link-btn">', unsafe_allow_html=True)
-            open_preview = st.button("Preview", key="preview_dataset_btn")
-            st.markdown("</div>", unsafe_allow_html=True)
-        with c2:
-            st.caption("Opens a popup with a quick preview.")
-
-        if open_preview:
-            preview_dialog(df, max_preview_rows)
-    except Exception:
-        st.dataframe(df.head(max_preview_rows), use_container_width=True)
-        st.caption(f"Showing the first {max_preview_rows} rows.")
-
-# ---- Scatter Plot ----
-with tabs[3]:
     st.subheader("Numeric Comparison Scatter Plot")
 
     controls, chart = st.columns([1, 2])
@@ -644,8 +622,7 @@ with tabs[3]:
         else:
             st.info("Select two different numeric columns to generate the scatter plot.")
 
-# ---- Bar Chart ----
-with tabs[4]:
+with tabs[3]:
     st.subheader("Category Distribution Bar Chart")
 
     controls, chart = st.columns([1, 2])
@@ -677,8 +654,7 @@ with tabs[4]:
         else:
             st.info("Select a categorical column to generate the bar chart.")
 
-# ---- Heatmap ----
-with tabs[5]:
+with tabs[4]:
     st.subheader("Category Relationship Heatmap")
 
     controls, chart = st.columns([1, 2])
@@ -711,8 +687,7 @@ with tabs[5]:
         else:
             st.info("Select two different categorical columns to generate the heatmap.")
 
-# ---- Export ----
-with tabs[6]:
+with tabs[5]:
     st.subheader("Export")
     st.write("Download your cleaned dataset for use in other visualization tools.")
     st.download_button(
