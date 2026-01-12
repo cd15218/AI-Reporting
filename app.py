@@ -10,7 +10,7 @@ from report_ai import build_visuals
 st.set_page_config(
     page_title="Dataset Reporting",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 # ---------------------------
@@ -111,7 +111,7 @@ def safe_len(x) -> int:
 def enforce_y_axis_horizontal(fig):
     """
     Forces all y-axis tick labels to be horizontal (tickangle=0) without touching x-axis.
-    Applies to yaxis, yaxis2, yaxis3... and also enables automargin so labels do not clip.
+    Applies to yaxis, yaxis2, yaxis3... and enables automargin.
     """
     if fig is None:
         return fig
@@ -147,7 +147,6 @@ def force_theme(fig, theme: dict):
     )
 
     try:
-        # Leave x-axis rotation alone
         fig.update_xaxes(
             tickfont=dict(color=theme["text"]),
             title_font=dict(color=theme["text"]),
@@ -259,11 +258,6 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str):
         html, body, [data-testid="stAppViewContainer"] * {{ color: {text}; }}
         .stCaption, .stMarkdown p, .stMarkdown li {{ color: {muted}; }}
 
-        section[data-testid="stSidebar"] > div {{
-            background: {palette["card_bg"]};
-            border-right: 1px solid {palette["border"]};
-        }}
-
         div[data-baseweb="select"] > div,
         textarea, input:not([type="file"]) {{
             background: {palette["widget_bg"]} !important;
@@ -323,10 +317,6 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str):
         unsafe_allow_html=True,
     )
 
-def ensure(key: str, value):
-    if key not in st.session_state:
-        st.session_state[key] = value
-
 def compute_numeric_stats(df: pd.DataFrame, col: str) -> dict:
     s = pd.to_numeric(df[col], errors="coerce").dropna()
     if s.empty:
@@ -375,35 +365,33 @@ for name, hx in SOLID_PALETTES.items():
 SOLID_PALETTE_OPTIONS = [_unique_hex_to_name[hx] for hx in _unique_hex_to_name]
 
 # ---------------------------
-# Page title at the true top
+# Header area: title at top, upload on left, appearance narrow on right
 # ---------------------------
 
 st.markdown("# Dataset Reporting")
 
-# ---------------------------
-# Sidebar (keep only uploader so sidebar still shows on load)
-# ---------------------------
+header_left, header_right = st.columns([3, 1], vertical_alignment="top")
 
-with st.sidebar:
-    st.header("Dataset")
-    file_sidebar = st.file_uploader("Upload CSV or Excel", type=["csv", "xlsx", "xls"], key="data_upload_sidebar")
-
-# ---------------------------
-# Top-of-page Appearance (with paint icon)
-# ---------------------------
-
-top_left, top_right = st.columns([2, 3], vertical_alignment="top")
-with top_left:
+with header_left:
     st.write("Upload a CSV or Excel file to generate key statistics and charts.")
+    file_top = st.file_uploader("Upload Dataset", type=["csv", "xlsx", "xls"], key="data_upload_top")
+    preview_clicked = False
 
-with top_right:
+    try:
+        @st.dialog("Dataset Preview")
+        def preview_dialog(df_to_show: pd.DataFrame, rows: int):
+            st.dataframe(df_to_show.head(rows), use_container_width=True)
+            st.caption(f"Showing the first {rows} rows.")
+    except Exception:
+        preview_dialog = None
+
+with header_right:
     with st.expander("🎨 Appearance", expanded=False):
         bg_mode = st.selectbox("Background Type", ["Solid", "Gradient", "Image"], index=1, key="bg_mode_top")
 
+        img_upload = None
         solid_choice = SOLID_PALETTE_OPTIONS[0] if SOLID_PALETTE_OPTIONS else "Slate"
         solid_picker = "#0f172a"
-
-        img_upload = None
         grad_a = "#0b1020"
         grad_b = "#123055"
         grad_angle = 135
@@ -420,7 +408,7 @@ with top_right:
             st.caption("Real gradient background.")
             grad_a = st.color_picker("Gradient Color A", value=grad_a, key="grad_a_top")
             grad_b = st.color_picker("Gradient Color B", value=grad_b, key="grad_b_top")
-            grad_angle = st.slider("Gradient Angle", 0, 360, grad_angle, key="grad_angle_top")
+            grad_angle = st.slider("Angle", 0, 360, grad_angle, key="grad_angle_top")
 
         if bg_mode == "Image":
             img_upload = st.file_uploader(
@@ -442,8 +430,7 @@ if bg_mode == "Solid":
     accent = solid_hex
 
 elif bg_mode == "Gradient":
-    grad_dark = is_dark_grad(grad_a, grad_b)
-    dark = grad_dark
+    dark = is_dark_grad(grad_a, grad_b)
     grad_css = f"linear-gradient({grad_angle}deg, {grad_a} 0%, {grad_b} 100%)"
     bg_css = f"background-image: {grad_css} !important; background-attachment: fixed !important;"
     accent = grad_b
@@ -488,7 +475,6 @@ palette = {
     "button_hover_bg": button_hover_bg,
     "button_text": button_text,
 }
-
 apply_css(bg_css, palette, page_text, page_muted)
 
 plotly_template = "plotly_dark" if dark else "plotly_white"
@@ -507,32 +493,15 @@ theme = {
 }
 
 # ---------------------------
-# Title section upload (keep) + preview button under uploader
+# Upload required
 # ---------------------------
 
-title_left, title_right = st.columns([3, 2], vertical_alignment="center")
-with title_right:
-    file_top = st.file_uploader("Upload Dataset", type=["csv", "xlsx", "xls"], key="data_upload_top")
-    preview_clicked = False
-
-    try:
-        @st.dialog("Dataset Preview")
-        def preview_dialog(df_to_show: pd.DataFrame, rows: int):
-            st.dataframe(df_to_show.head(rows), use_container_width=True)
-            st.caption(f"Showing the first {rows} rows.")
-
-        if file_top is not None:
-            preview_clicked = st.button("Preview Dataset", key="preview_dataset_btn_top")
-    except Exception:
-        pass
-
-uploaded = file_top if file_top is not None else file_sidebar
-if not uploaded:
+if file_top is None:
     st.info("Upload a dataset to begin.")
     st.stop()
 
 try:
-    df = read_df(uploaded)
+    df = read_df(file_top)
 except Exception as e:
     st.error(f"Could not read the file. {e}")
     st.stop()
@@ -540,17 +509,15 @@ except Exception as e:
 numeric_cols = df.select_dtypes(include="number").columns.tolist()
 categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
 
-# Preview dialog after upload
-try:
-    if file_top is not None and preview_clicked:
-        # Default preview rows will come from controls below; if not set yet, use 25
-        rows = int(st.session_state.get("max_preview_rows_main", 25))
-        preview_dialog(df, rows)
-except Exception:
-    pass
+# Show preview button under uploader after upload
+max_preview_rows = st.session_state.get("max_preview_rows_main", 25)
+if preview_dialog is not None:
+    preview_clicked = st.button("Preview Dataset", key="preview_dataset_btn_top")
+    if preview_clicked:
+        preview_dialog(df, int(max_preview_rows))
 
 # ---------------------------
-# Key Statistics (filters moved here)
+# Key Statistics controls (formerly sidebar filters)
 # ---------------------------
 
 st.subheader("Key Statistics")
@@ -606,7 +573,7 @@ summary, visuals_kpi, numeric_df, categorical_df = build_visuals(
     max_categories=max_categories,
 )
 
-# KPIs
+# KPI metrics
 kpi_cols = st.columns(5)
 if primary_numeric != "None":
     stats = compute_numeric_stats(df, primary_numeric)
@@ -629,7 +596,7 @@ meta_cols[2].metric("Categorical Columns", int(len(categorical_cols)))
 meta_cols[3].metric("Missing Cells", int(df.isna().sum().sum()))
 
 # ---------------------------
-# Radial chart (still part of Key Statistics)
+# Radial chart (part of Key Statistics)
 # ---------------------------
 
 st.markdown("Radial Category Breakdown")
