@@ -228,26 +228,21 @@ def force_theme(fig, theme: dict):
     return fig
 
 def apply_css(bg_css: str, palette: dict, text: str, muted: str):
-    # Custom paint icon SVG (monochrome, inherits theme text color via CSS)
-    paint_svg = """
-    <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'>
-      <path d='M12 3c-4.97 0-9 3.58-9 8 0 2.95 1.89 5.52 4.66 6.97.63.33 1.34.03 1.63-.63l.54-1.25c.2-.47.66-.78 1.17-.78h1.77c1.1 0 1.99.89 1.99 1.99v1.55c0 .62.5 1.13 1.12 1.13C20.64 19.99 21 15.4 21 11c0-4.42-4.03-8-9-8Z' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/>
-      <path d='M8.4 10.2h.01M11.2 8.6h.01M14.2 10.2h.01M12.8 12.9h.01' stroke='currentColor' stroke-width='2.4' stroke-linecap='round'/>
-      <path d='M16.2 14.7l3.1 3.1c.46.46.46 1.2 0 1.66l-.72.72c-.46.46-1.2.46-1.66 0l-3.1-3.1' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/>
+    # Base64 SVG so it won’t break from escaping rules.
+    # Use the current theme text color directly (background-images can’t inherit currentColor reliably).
+    svg = f"""
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+      <path d="M12 3c-4.97 0-9 3.58-9 8 0 2.95 1.89 5.52 4.66 6.97.63.33 1.34.03 1.63-.63l.54-1.25c.2-.47.66-.78 1.17-.78h1.77c1.1 0 1.99.89 1.99 1.99v1.55c0 .62.5 1.13 1.12 1.13C20.64 19.99 21 15.4 21 11c0-4.42-4.03-8-9-8Z"
+            stroke="{text}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M8.4 10.2h.01M11.2 8.6h.01M14.2 10.2h.01M12.8 12.9h.01"
+            stroke="{text}" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M16.2 14.7l3.1 3.1c.46.46.46 1.2 0 1.66l-.72.72c-.46.46-1.2.46-1.66 0l-3.1-3.1"
+            stroke="{text}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
     """.strip()
 
-    paint_data_uri = "data:image/svg+xml;utf8," + (
-        paint_svg.replace("#", "%23")
-                 .replace("\n", "")
-                 .replace("\r", "")
-                 .replace("  ", " ")
-                 .replace("<", "%3C")
-                 .replace(">", "%3E")
-                 .replace('"', "%22")
-                 .replace("'", "%27")
-                 .replace(" ", "%20")
-    )
+    svg_b64 = base64.b64encode(svg.encode("utf-8")).decode("utf-8")
+    paint_uri = f"data:image/svg+xml;base64,{svg_b64}"
 
     st.markdown(
         f"""
@@ -334,31 +329,34 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str):
             background: {palette["button_hover_bg"]} !important;
         }}
 
-        /* Icon-only expander header (auto-fit box) */
+        /* Icon-only expander summary auto fits */
         [data-testid="stExpander"] details > summary {{
             width: fit-content !important;
             max-width: fit-content !important;
-            padding: 0.48rem 0.62rem !important;
+            padding: 0.52rem 0.68rem !important;
             border-radius: 14px !important;
             border: 1px solid {palette["border"]} !important;
             background: {palette["widget_bg"]} !important;
             margin-left: auto !important;
         }}
-        /* Hide the default caret icon */
+
+        /* Hide Streamlit’s caret icon (usually an svg in the summary) */
         [data-testid="stExpander"] details > summary svg {{
             display: none !important;
         }}
-        /* Hide default text */
+
+        /* Hide default label text */
         [data-testid="stExpander"] details > summary p {{
             display: none !important;
         }}
-        /* Add our paint icon */
+
+        /* Our paint icon */
         [data-testid="stExpander"] details > summary::before {{
             content: "" !important;
             display: inline-block !important;
             width: 20px !important;
             height: 20px !important;
-            background-image: url("{paint_data_uri}") !important;
+            background-image: url("{paint_uri}") !important;
             background-size: contain !important;
             background-repeat: no-repeat !important;
             background-position: center !important;
@@ -416,7 +414,7 @@ for name, hx in SOLID_PALETTES.items():
 SOLID_PALETTE_OPTIONS = [_unique_hex_to_name[hx] for hx in _unique_hex_to_name]
 
 # ---------------------------
-# Header area: title at top, upload on left, icon-only appearance on right
+# Page header
 # ---------------------------
 
 st.markdown("# Dataset Reporting")
@@ -436,7 +434,7 @@ with header_left:
         preview_dialog = None
 
 with header_right:
-    # Label is intentionally a single space; CSS hides it and replaces with our icon
+    # label intentionally blank so CSS replaces it with the icon
     with st.expander(" ", expanded=False):
         bg_mode = st.selectbox("Background Type", ["Solid", "Gradient", "Image"], index=1, key="bg_mode_top")
 
@@ -473,10 +471,8 @@ with header_right:
 # Theme construction
 # ---------------------------
 
-# Pull current appearance values back out of session state, because expander scope can vary
 bg_mode = st.session_state.get("bg_mode_top", "Gradient")
-
-img_upload = st.session_state.get("bg_image_top", None)  # file uploader object or None
+img_upload = st.session_state.get("bg_image_top", None)
 solid_choice = st.session_state.get("solid_choice_top", SOLID_PALETTE_OPTIONS[0] if SOLID_PALETTE_OPTIONS else "Slate")
 solid_picker = st.session_state.get("solid_picker_top", SOLID_PALETTES.get(solid_choice, "#0f172a"))
 grad_a = st.session_state.get("grad_a_top", "#0b1020")
