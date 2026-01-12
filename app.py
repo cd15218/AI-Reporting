@@ -302,76 +302,90 @@ def inject_dropdown_scroll_to_selected():
         """
         <script>
         (function() {
-          if (window.__dropdownStickyAppliedV2) return;
-          window.__dropdownStickyAppliedV2 = true;
+          if (window.__dropdownStickyAppliedV3) return;
+          window.__dropdownStickyAppliedV3 = true;
 
-          function selectedNode(menuEl) {
+          function getMenus() {
+            return Array.from(document.querySelectorAll('div[data-baseweb="menu"]'));
+          }
+
+          function findSelected(menuEl) {
             if (!menuEl) return null;
 
-            // Most common
+            // Preferred selectors
             let sel =
               menuEl.querySelector('[role="option"][aria-selected="true"]') ||
               menuEl.querySelector('[role="option"][data-selected="true"]') ||
               menuEl.querySelector('[role="option"][aria-checked="true"]');
 
-            // Fallback: any element marked selected
+            // Fallback for different BaseWeb builds
             if (!sel) sel = menuEl.querySelector('[aria-selected="true"]') || menuEl.querySelector('[aria-checked="true"]');
 
+            // Another fallback: list item with "selected" in className
+            if (!sel) {
+              const opts = menuEl.querySelectorAll('[role="option"]');
+              for (const o of opts) {
+                const cls = (o.className || "").toString().toLowerCase();
+                if (cls.includes("selected") || cls.includes("active")) { sel = o; break; }
+              }
+            }
             return sel;
           }
 
-          function scrollSelected(menuEl) {
-            const sel = selectedNode(menuEl);
+          function scrollToSelected(menuEl) {
+            const sel = findSelected(menuEl);
             if (sel && sel.scrollIntoView) {
               sel.scrollIntoView({ block: "center" });
             }
           }
 
           function scrollAllMenus() {
-            const menus = document.querySelectorAll('div[data-baseweb="menu"]');
-            menus.forEach(scrollSelected);
+            const menus = getMenus();
+            for (const m of menus) scrollToSelected(m);
           }
 
           function scheduleScroll() {
-            // several frames to catch slow renders / portals
-            setTimeout(scrollAllMenus, 0);
-            setTimeout(scrollAllMenus, 40);
-            setTimeout(scrollAllMenus, 120);
-            setTimeout(scrollAllMenus, 260);
+            // multiple attempts to catch slow portals and transitions
+            requestAnimationFrame(() => scrollAllMenus());
+            setTimeout(scrollAllMenus, 30);
+            setTimeout(scrollAllMenus, 90);
+            setTimeout(scrollAllMenus, 180);
+            setTimeout(scrollAllMenus, 320);
           }
 
-          // 1) menus added to DOM
+          // A) Menus added (portal render)
           const addObs = new MutationObserver((mutations) => {
-            let sawMenu = false;
+            let sawSomething = false;
             for (const m of mutations) {
               for (const node of m.addedNodes || []) {
                 if (!(node instanceof HTMLElement)) continue;
                 if (node.matches?.('div[data-baseweb="menu"]') || node.querySelector?.('div[data-baseweb="menu"]')) {
-                  sawMenu = true;
+                  sawSomething = true;
                 }
               }
             }
-            if (sawMenu) scheduleScroll();
+            if (sawSomething) scheduleScroll();
           });
           addObs.observe(document.body, { childList: true, subtree: true });
 
-          // 2) menus already exist but "open" by attribute/style changes
+          // B) Menus already exist but toggle visibility (style/class/aria-hidden)
           const attrObs = new MutationObserver((mutations) => {
             for (const m of mutations) {
               const t = m.target;
               if (!(t instanceof HTMLElement)) continue;
-              if (t.matches?.('div[data-baseweb="menu"]')) {
-                // If it becomes visible, schedule
-                const style = window.getComputedStyle(t);
-                if (style && style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0") {
-                  scheduleScroll();
-                }
+
+              const isMenu = t.matches?.('div[data-baseweb="menu"]');
+              const hasMenuChild = t.querySelector?. && t.querySelector('div[data-baseweb="menu"]');
+
+              if (isMenu || hasMenuChild) {
+                scheduleScroll();
+                return;
               }
             }
           });
-          attrObs.observe(document.body, { attributes: true, subtree: true, attributeFilter: ["style", "aria-hidden", "class"] });
+          attrObs.observe(document.body, { attributes: true, subtree: true, attributeFilter: ["style", "class", "aria-hidden", "aria-expanded"] });
 
-          // 3) click/keyboard opening
+          // C) User interaction
           document.addEventListener("pointerdown", (e) => {
             const sel = e.target?.closest?.('div[data-baseweb="select"]');
             if (sel) scheduleScroll();
@@ -381,30 +395,9 @@ def inject_dropdown_scroll_to_selected():
             const keys = ["Enter", " ", "ArrowDown", "ArrowUp"];
             if (!keys.includes(e.key)) return;
             const active = document.activeElement;
-            if (active && active.closest && active.closest('div[data-baseweb="select"]')) {
-              scheduleScroll();
-            }
+            if (active && active.closest && active.closest('div[data-baseweb="select"]')) scheduleScroll();
           }, true);
 
-        })();
-        </script>
-        """,
-        height=0,
-        width=0,
-    )
-
-
-# ---------------------------
-# Auto scroll to Key Statistics on upload
-# ---------------------------
-
-def scroll_to_key_stats_once():
-    components.html(
-        """
-        <script>
-        (function(){
-          const el = document.getElementById("key-stats-anchor");
-          if (el) el.scrollIntoView({behavior:"smooth", block:"start"});
         })();
         </script>
         """,
@@ -483,6 +476,7 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, sidebar_icon_ur
             padding: 0 !important;
         }}
 
+        /* Main widgets */
         div[data-baseweb="select"] > div,
         textarea, input:not([type="file"]) {{
             background: {palette["widget_bg"]} !important;
@@ -535,10 +529,7 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, sidebar_icon_ur
             background: {palette["button_hover_bg"]} !important;
         }}
 
-        .filters-tight [data-testid="stVerticalBlock"] {{
-            gap: 0.35rem !important;
-        }}
-
+        /* Sidebar */
         section[data-testid="stSidebar"] {{
             background: {sidebar_bg} !important;
             border-right: 1px solid {sidebar_border} !important;
@@ -604,14 +595,13 @@ if "grad_b" not in st.session_state:
     st.session_state["grad_b"] = "#123055"
 if "grad_angle" not in st.session_state:
     st.session_state["grad_angle"] = 135
-
-if "last_uploaded_name" not in st.session_state:
-    st.session_state["last_uploaded_name"] = None
-if "scroll_to_key_stats" not in st.session_state:
-    st.session_state["scroll_to_key_stats"] = False
+if "max_categories_main" not in st.session_state:
+    st.session_state["max_categories_main"] = 20
+if "max_preview_rows_main" not in st.session_state:
+    st.session_state["max_preview_rows_main"] = 25
 
 # ---------------------------
-# Sidebar: ONLY Page Appearance
+# Sidebar: Appearance + Filters + Jump To
 # ---------------------------
 
 with st.sidebar:
@@ -638,6 +628,28 @@ with st.sidebar:
 
     elif st.session_state["bg_mode"] == "Image":
         st.file_uploader("Upload Background Image", type=["png", "jpg", "jpeg", "webp"], key="bg_image")
+
+    st.divider()
+    st.markdown("## Filters")
+    st.slider("Max Categories", 5, 50, int(st.session_state.get("max_categories_main", 20)), key="max_categories_main")
+    st.slider("Preview Rows", 5, 100, int(st.session_state.get("max_preview_rows_main", 25)), key="max_preview_rows_main")
+
+    st.divider()
+    st.markdown("## Jump To")
+    st.markdown(
+        """
+        - [Upload](#upload)
+        - [Key Statistics](#key-statistics)
+        - [Radial Breakdown](#radial-breakdown)
+        - [Tables](#tables)
+        - [Distribution](#distribution)
+        - [Scatter Plot](#scatter-plot)
+        - [Bar Chart](#bar-chart)
+        - [Heatmap](#heatmap)
+        - [Export](#export)
+        """,
+        unsafe_allow_html=True,
+    )
 
 # ---------------------------
 # Theme construction
@@ -724,7 +736,7 @@ theme = {
 }
 
 # ---------------------------
-# Title + description
+# Title + description + Jump To (top)
 # ---------------------------
 
 st.markdown("# Dataset Reporting")
@@ -732,25 +744,25 @@ st.markdown("<div class='title-desc-tight'>", unsafe_allow_html=True)
 st.markdown("Upload a CSV or Excel file to generate key statistics and charts.")
 st.markdown("</div>", unsafe_allow_html=True)
 
+st.markdown(
+    """
+    [Upload](#upload) ·
+    [Key Statistics](#key-statistics) ·
+    [Radial Breakdown](#radial-breakdown) ·
+    [Charts](#tables) ·
+    [Export](#export)
+    """
+)
+
 # ---------------------------
-# Upload + filters + preview (removed report type)
+# Upload + preview
 # ---------------------------
+
+st.markdown("<div id='upload'></div>", unsafe_allow_html=True)
 
 left_upload, _ = st.columns([2, 6], vertical_alignment="top")
-
 with left_upload:
     file_top = st.file_uploader("Upload Dataset", type=["csv", "xlsx", "xls"], key="data_upload_top")
-
-    st.markdown("<div class='filters-tight'>", unsafe_allow_html=True)
-    r2, r3 = st.columns([1.1, 1.1], vertical_alignment="center")
-
-    with r2:
-        max_categories = st.slider("Max Categories", 5, 50, 20, key="max_categories_main")
-
-    with r3:
-        max_preview_rows = st.slider("Preview Rows", 5, 100, 25, key="max_preview_rows_main")
-
-    st.markdown("</div>", unsafe_allow_html=True)
 
     try:
         @st.dialog("Dataset Preview")
@@ -766,12 +778,6 @@ if file_top is None:
     st.info("Upload a dataset to begin.")
     st.stop()
 
-# Detect new upload and enable one-time scroll
-current_name = getattr(file_top, "name", None)
-if current_name and current_name != st.session_state.get("last_uploaded_name"):
-    st.session_state["last_uploaded_name"] = current_name
-    st.session_state["scroll_to_key_stats"] = True
-
 try:
     df = read_df(file_top)
 except Exception as e:
@@ -784,21 +790,14 @@ if preview_dialog is not None and preview_clicked:
 numeric_cols = df.select_dtypes(include="number").columns.tolist()
 categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
 
-# Extra spacing between filters and Key Statistics
+# spacing between upload section and Key Statistics
 st.markdown("<div style='height: 1.25rem;'></div>", unsafe_allow_html=True)
-
-# Anchor for auto scroll
-st.markdown("<div id='key-stats-anchor'></div>", unsafe_allow_html=True)
-
-# Trigger one-time scroll after upload
-if st.session_state.get("scroll_to_key_stats"):
-    scroll_to_key_stats_once()
-    st.session_state["scroll_to_key_stats"] = False
 
 # ---------------------------
 # Key Statistics
 # ---------------------------
 
+st.markdown("<div id='key-statistics'></div>", unsafe_allow_html=True)
 st.subheader("Key Statistics")
 
 kpi_left, kpi_right = st.columns([2, 6], vertical_alignment="top")
@@ -859,6 +858,7 @@ meta_cols[3].metric("Missing Cells", int(df.isna().sum().sum()))
 # Radial chart
 # ---------------------------
 
+st.markdown("<div id='radial-breakdown'></div>", unsafe_allow_html=True)
 st.markdown("Radial Category Breakdown")
 rad_controls, rad_chart = st.columns([1, 2])
 
@@ -920,11 +920,13 @@ with rad_chart:
 tabs = st.tabs(["Tables", "Distribution", "Scatter Plot", "Bar Chart", "Heatmap", "Export"])
 
 with tabs[0]:
+    st.markdown("<div id='tables'></div>", unsafe_allow_html=True)
     st.subheader("Statistics Tables")
     st.dataframe(numeric_df, use_container_width=True)
     st.dataframe(categorical_df, use_container_width=True)
 
 with tabs[1]:
+    st.markdown("<div id='distribution'></div>", unsafe_allow_html=True)
     st.subheader("Distribution")
     if primary_numeric:
         fig = get_fig(visuals_kpi, "numeric_distribution")
@@ -937,6 +939,7 @@ with tabs[1]:
         st.info("No numeric columns available for a distribution chart.")
 
 with tabs[2]:
+    st.markdown("<div id='scatter-plot'></div>", unsafe_allow_html=True)
     st.subheader("Numeric Comparison Scatter Plot")
     controls, chart = st.columns([1, 2])
 
@@ -980,6 +983,7 @@ with tabs[2]:
             st.info("Add numeric columns to generate the scatter plot.")
 
 with tabs[3]:
+    st.markdown("<div id='bar-chart'></div>", unsafe_allow_html=True)
     st.subheader("Category Distribution Bar Chart")
     controls, chart = st.columns([1, 2])
 
@@ -1020,6 +1024,7 @@ with tabs[3]:
             st.info("Add categorical columns to generate the bar chart.")
 
 with tabs[4]:
+    st.markdown("<div id='heatmap'></div>", unsafe_allow_html=True)
     st.subheader("Category Relationship Heatmap")
     controls, chart = st.columns([1, 2])
 
@@ -1063,6 +1068,7 @@ with tabs[4]:
             st.info("Add categorical columns to generate the heatmap.")
 
 with tabs[5]:
+    st.markdown("<div id='export'></div>", unsafe_allow_html=True)
     st.subheader("Export")
     st.download_button(
         "Download CSV",
