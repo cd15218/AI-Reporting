@@ -276,7 +276,7 @@ def _sync_solid_picker():
         st.session_state["solid_picker"] = SOLID_PALETTES[choice]
 
 # ---------------------------
-# Dropdown sticky selection (scroll to current selection on open)
+# Sticky dropdown selection
 # ---------------------------
 
 def inject_dropdown_scroll_to_selected():
@@ -286,6 +286,10 @@ def inject_dropdown_scroll_to_selected():
         (function() {
           if (window.__dropdownStickyApplied) return;
           window.__dropdownStickyApplied = true;
+
+          function findMenus() {
+            return Array.from(document.querySelectorAll('div[data-baseweb="menu"]'));
+          }
 
           function scrollSelected(menuEl) {
             if (!menuEl) return;
@@ -298,22 +302,47 @@ def inject_dropdown_scroll_to_selected():
             }
           }
 
+          function scrollAllMenus() {
+            const menus = findMenus();
+            for (const m of menus) scrollSelected(m);
+          }
+
+          function scheduleScroll() {
+            setTimeout(scrollAllMenus, 0);
+            setTimeout(scrollAllMenus, 60);
+            setTimeout(scrollAllMenus, 180);
+          }
+
+          // When a menu is added to the DOM (common case)
           const obs = new MutationObserver((mutations) => {
+            let sawMenu = false;
             for (const m of mutations) {
               for (const node of m.addedNodes || []) {
                 if (!(node instanceof HTMLElement)) continue;
-                const menu =
-                  node.querySelector?.('div[data-baseweb="menu"]') ||
-                  (node.matches?.('div[data-baseweb="menu"]') ? node : null);
-                if (menu) {
-                  setTimeout(() => scrollSelected(menu), 0);
-                  setTimeout(() => scrollSelected(menu), 50);
+                if (node.matches?.('div[data-baseweb="menu"]') || node.querySelector?.('div[data-baseweb="menu"]')) {
+                  sawMenu = true;
                 }
               }
             }
+            if (sawMenu) scheduleScroll();
           });
-
           obs.observe(document.body, { childList: true, subtree: true });
+
+          // Also catch the portal case where the menu exists but opens via aria-expanded
+          document.addEventListener("click", (e) => {
+            const btn = e.target?.closest?.('div[data-baseweb="select"]');
+            if (btn) scheduleScroll();
+          }, true);
+
+          document.addEventListener("keydown", (e) => {
+            const keys = ["Enter", " ", "ArrowDown", "ArrowUp"];
+            if (!keys.includes(e.key)) return;
+            const active = document.activeElement;
+            if (active && active.closest && active.closest('div[data-baseweb="select"]')) {
+              scheduleScroll();
+            }
+          }, true);
+
         })();
         </script>
         """,
@@ -325,7 +354,7 @@ def inject_dropdown_scroll_to_selected():
 # CSS
 # ---------------------------
 
-def apply_css(bg_css: str, palette: dict, text: str, muted: str, sidebar_icon_uri: str | None):
+def apply_css(bg_css: str, palette: dict, text: str, muted: str, sidebar_icon_uri: str | None, dark_mode: bool):
     icon_css = ""
     if sidebar_icon_uri:
         icon_css = f"""
@@ -345,6 +374,11 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, sidebar_icon_ur
             opacity: 0.95 !important;
         }}
         """
+
+    sidebar_bg = "rgba(2, 6, 23, 0.78)" if dark_mode else "rgba(255, 255, 255, 0.92)"
+    sidebar_border = palette["border"]
+    sidebar_widget_bg = "rgba(255,255,255,0.10)" if dark_mode else "rgba(15,23,42,0.06)"
+    sidebar_hover = "rgba(148, 163, 184, 0.22)" if dark_mode else "rgba(15, 23, 42, 0.10)"
 
     st.markdown(
         f"""
@@ -442,10 +476,46 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, sidebar_icon_ur
             gap: 0.35rem !important;
         }}
 
-        .preview-autofit .stButton>button {{
-            width: auto !important;
-            padding: 0.35rem 0.7rem !important;
-            border-radius: 999px !important;
+        section[data-testid="stSidebar"] {{
+            background: {sidebar_bg} !important;
+            border-right: 1px solid {sidebar_border} !important;
+        }}
+        section[data-testid="stSidebar"] * {{
+            color: {text} !important;
+        }}
+        section[data-testid="stSidebar"] .stCaption,
+        section[data-testid="stSidebar"] .stMarkdown p,
+        section[data-testid="stSidebar"] .stMarkdown li {{
+            color: {muted} !important;
+        }}
+
+        section[data-testid="stSidebar"] div[data-baseweb="select"] > div,
+        section[data-testid="stSidebar"] textarea,
+        section[data-testid="stSidebar"] input:not([type="file"]) {{
+            background: {sidebar_widget_bg} !important;
+            border: 1px solid {sidebar_border} !important;
+            color: {text} !important;
+        }}
+        section[data-testid="stSidebar"] div[data-baseweb="select"] span {{
+            color: {text} !important;
+        }}
+        section[data-testid="stSidebar"] div[data-baseweb="popover"] div[data-baseweb="menu"] {{
+            background: {palette["menu_bg"]} !important;
+            border: 1px solid {sidebar_border} !important;
+        }}
+        section[data-testid="stSidebar"] div[data-baseweb="popover"] div[data-baseweb="menu"] * {{
+            color: {palette["menu_text"]} !important;
+        }}
+        section[data-testid="stSidebar"] div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"]:hover {{
+            background: {sidebar_hover} !important;
+        }}
+
+        section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] {{
+            background: {sidebar_widget_bg} !important;
+            border: 1px dashed {sidebar_border} !important;
+        }}
+        section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] * {{
+            color: {text} !important;
         }}
 
         {icon_css}
@@ -564,9 +634,8 @@ palette = {
     "button_text": button_text,
 }
 
-# Paint icon next to sidebar toggle (requires paint.png in same folder as app.py)
 sidebar_icon_uri = load_png_data_uri("paint.png")
-apply_css(bg_css, palette, page_text, page_muted, sidebar_icon_uri)
+apply_css(bg_css, palette, page_text, page_muted, sidebar_icon_uri, dark)
 
 inject_dropdown_scroll_to_selected()
 
@@ -595,7 +664,7 @@ st.markdown("Upload a CSV or Excel file to generate key statistics and charts.")
 st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------------------------
-# Upload + filters + preview (filters between upload and preview)
+# Upload + filters + preview
 # ---------------------------
 
 left_upload, _ = st.columns([2, 6], vertical_alignment="top")
@@ -615,22 +684,11 @@ with left_upload:
         )
 
     with r2:
-        max_categories = st.slider(
-            "Max Categories",
-            5,
-            50,
-            20,
-            key="max_categories_main",
-        )
+        max_categories = st.slider("Max Categories", 5, 50, 20, key="max_categories_main")
 
     with r3:
-        max_preview_rows = st.slider(
-            "Preview Rows",
-            5,
-            100,
-            25,
-            key="max_preview_rows_main",
-        )
+        max_preview_rows = st.slider("Preview Rows", 5, 100, 25, key="max_preview_rows_main")
+
     st.markdown("</div>", unsafe_allow_html=True)
 
     try:
@@ -733,12 +791,7 @@ with rad_controls:
         radial_col_kpi = None
         st.info("No categorical columns found for a radial chart.")
 
-    radial_mode_label = st.selectbox(
-        "Value Type",
-        options=["Count", "Sum of Numeric Column"],
-        index=0,
-        key="kpi_radial_mode",
-    )
+    radial_mode_label = st.selectbox("Value Type", ["Count", "Sum of Numeric Column"], index=0, key="kpi_radial_mode")
 
     radial_value_col_kpi = None
     if radial_mode_label == "Sum of Numeric Column":
