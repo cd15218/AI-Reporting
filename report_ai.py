@@ -4,6 +4,8 @@ import plotly.express as px
 
 def _hex_to_rgb(hex_color: str):
     h = hex_color.lstrip("#")
+    if len(h) == 3:
+        h = "".join([c * 2 for c in h])
     return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
 
 def _rgb_to_hex(rgb):
@@ -18,8 +20,7 @@ def _blend(rgb_a, rgb_b, t: float):
 
 def generate_shades(base_hex: str, n: int):
     """
-    Produce n shades of the same base color by blending a light tint to a darker tone.
-    This keeps the radial chart cohesive while still separating categories visually.
+    Produce n shades of one base color by blending a light tint to a darker tone.
     """
     base = _hex_to_rgb(base_hex)
     white = (255, 255, 255)
@@ -37,6 +38,23 @@ def generate_shades(base_hex: str, n: int):
         rgb = _blend(light_anchor, dark_anchor, t)
         shades.append(_rgb_to_hex(rgb))
     return shades
+
+def _polish_layout(fig, title_text: str):
+    """
+    Standardize title casing, alignment, sizing, and margins across charts.
+    """
+    fig.update_layout(
+        title={
+            "text": title_text,
+            "x": 0.02,
+            "xanchor": "left",
+            "yanchor": "top",
+        },
+        margin=dict(t=72, l=40, r=40, b=40),
+        title_font=dict(size=18),
+        legend_title_text="Legend"
+    )
+    return fig
 
 def build_visuals(
     df: pd.DataFrame,
@@ -79,12 +97,15 @@ def build_visuals(
         fig = px.histogram(
             df,
             x=primary_numeric,
-            title=f"Distribution of {primary_numeric}",
             labels={primary_numeric: primary_numeric, "count": "Frequency"},
+        )
+        fig = _polish_layout(
+            fig,
+            f"Distribution of {primary_numeric}<br><sup>Frequency of values across the dataset</sup>"
         )
         visuals.append(("numeric_distribution", fig))
 
-    # ---------- NUMERIC COMPARISON ----------
+    # ---------- NUMERIC COMPARISON (SCATTER) ----------
     x = user_choices.get("scatter_x")
     y = user_choices.get("scatter_y")
 
@@ -93,12 +114,12 @@ def build_visuals(
             df,
             x=x,
             y=y,
-            title=f"{y} vs {x}",
             labels={x: x, y: y},
         )
+        fig = _polish_layout(fig, f"{y} vs. {x}")
         visuals.append(("numeric_scatter", fig))
 
-    # ---------- CATEGORY VOLUME ----------
+    # ---------- CATEGORY VOLUME (BAR) ----------
     cat_vol = user_choices.get("category_volume")
     if cat_vol and cat_vol in categorical_cols:
         vc = (
@@ -115,12 +136,12 @@ def build_visuals(
             vc,
             x=cat_vol,
             y="Count",
-            title=f"Category volume: {cat_vol}",
             labels={cat_vol: cat_vol, "Count": "Records"},
         )
+        fig = _polish_layout(fig, f"Category Distribution: {cat_vol}")
         visuals.append(("category_volume", fig))
 
-    # ---------- CATEGORY COMPARISON HEATMAP ----------
+    # ---------- CATEGORY COMPARISON (HEATMAP) ----------
     a = user_choices.get("category_a")
     b = user_choices.get("category_b")
 
@@ -134,9 +155,9 @@ def build_visuals(
 
         fig = px.imshow(
             ct,
-            title=f"Category relationship: {a} vs {b}",
             labels=dict(x=b, y=a, color="Count"),
         )
+        fig = _polish_layout(fig, f"Category Relationship: {a} vs. {b}")
         visuals.append(("category_heatmap", fig))
 
     # ---------- RADIAL CATEGORY (DONUT) ----------
@@ -155,11 +176,13 @@ def build_visuals(
         if radial_mode == "sum" and radial_value_col and radial_value_col in numeric_cols:
             grouped = temp.groupby(radial_col, dropna=False)[radial_value_col].sum().reset_index()
             grouped = grouped.rename(columns={radial_value_col: "Value"})
-            value_label = f"Sum of {radial_value_col}"
+            value_label = f"Total {radial_value_col}"
+            title = f"Category Breakdown by Total {radial_value_col}"
         else:
             grouped = temp[radial_col].value_counts().reset_index()
             grouped.columns = [radial_col, "Value"]
             value_label = "Count"
+            title = f"Category Breakdown: {radial_col}"
 
         grouped = grouped.sort_values("Value", ascending=False).head(max_categories)
 
@@ -171,7 +194,6 @@ def build_visuals(
             names=radial_col,
             values="Value",
             hole=0.55,
-            title=f"Radial breakdown: {radial_col}",
             labels={radial_col: radial_col, "Value": value_label},
             color_discrete_sequence=shades,
         )
@@ -182,6 +204,7 @@ def build_visuals(
             hovertemplate=f"{radial_col}: %{{label}}<br>{value_label}: %{{value}}<extra></extra>",
         )
 
+        fig = _polish_layout(fig, title)
         visuals.append(("radial_donut", fig))
 
     # ---------- TABLES ----------
