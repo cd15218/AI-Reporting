@@ -283,6 +283,27 @@ def compute_numeric_stats(df: pd.DataFrame, col: str) -> dict:
     }
 
 # ---------------------------
+# Palettes (single source of truth)
+# ---------------------------
+
+SOLID_PALETTES = {
+    "Slate": "#0f172a",
+    "Midnight": "#0b1020",
+    "Soft Gray": "#f3f4f6",
+    "Warm Cream": "#fbf7ef",
+    "Forest": "#0b3d2e",
+    "Ocean": "#0b3a5b",
+    "Plum": "#2a1033",
+}
+
+# De-duplicate by hex value while preserving first occurrence order
+_unique = {}
+for name, hx in SOLID_PALETTES.items():
+    if hx not in _unique:
+        _unique[hx] = name
+SOLID_PALETTE_OPTIONS = [_unique[hx] for hx in _unique]  # names in stable order
+
+# ---------------------------
 # Sidebar
 # ---------------------------
 
@@ -290,17 +311,7 @@ with st.sidebar:
     with st.expander("Appearance", expanded=False):
         bg_mode = st.selectbox("Background Type", ["Solid", "Gradient", "Image"], index=1)
 
-        solid_palettes = {
-            "Slate": "#0f172a",
-            "Midnight": "#0b1020",
-            "Soft Gray": "#f3f4f6",
-            "Warm Cream": "#fbf7ef",
-            "Forest": "#0b3d2e",
-            "Ocean": "#0b3a5b",
-            "Plum": "#2a1033",
-        }
-
-        solid_choice = "Slate"
+        solid_choice = SOLID_PALETTE_OPTIONS[0] if SOLID_PALETTE_OPTIONS else "Slate"
         custom_solid = ""
         img_upload = None
 
@@ -309,7 +320,7 @@ with st.sidebar:
         grad_angle = 135
 
         if bg_mode == "Solid":
-            solid_choice = st.selectbox("Solid Palette", list(solid_palettes.keys()), index=0)
+            solid_choice = st.selectbox("Solid Palette", SOLID_PALETTE_OPTIONS, index=0)
             custom_solid = st.text_input("Optional Custom Hex", value="", placeholder="#112233")
 
         if bg_mode == "Gradient":
@@ -331,7 +342,7 @@ with st.sidebar:
 # Theme construction
 # ---------------------------
 
-solid_hex = solid_palettes.get(solid_choice, "#0f172a")
+solid_hex = SOLID_PALETTES.get(solid_choice, "#0f172a")
 if custom_solid and custom_solid.strip().startswith("#") and len(custom_solid.strip()) in (4, 7):
     solid_hex = custom_solid.strip()
 
