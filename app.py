@@ -283,25 +283,53 @@ def compute_numeric_stats(df: pd.DataFrame, col: str) -> dict:
     }
 
 # ---------------------------
-# Palettes (single source of truth)
+# Solid palettes (expanded + de-duplicated)
 # ---------------------------
 
+# If two palettes share the same hex, the first one wins and the duplicate is dropped automatically below.
 SOLID_PALETTES = {
+    # Dark neutrals
     "Slate": "#0f172a",
-    "Midnight": "#0b1020",
-    "Soft Gray": "#f3f4f6",
-    "Warm Cream": "#fbf7ef",
-    "Forest": "#0b3d2e",
+    "Midnight": "#050814",
+    "Charcoal": "#111827",
+    "Graphite": "#1f2937",
+
+    # Cool accents
     "Ocean": "#0b3a5b",
+    "Deep Teal": "#064e4e",
+    "Indigo": "#1e1b4b",
+    "Cobalt": "#1e3a8a",
+
+    # Warm accents
+    "Forest": "#0b3d2e",
+    "Mocha": "#2b1d15",
     "Plum": "#2a1033",
+    "Burgundy": "#3f0d1f",
+
+    # Light neutrals
+    "Soft Gray": "#f3f4f6",
+    "Light Studio": "#f8fafc",
+    "Paper White": "#ffffff",
+    "Warm Cream": "#fbf7ef",
+
+    # Mid neutrals
+    "Stone": "#e7e5e4",
+    "Sand": "#f5efe6",
+
+    # Soft tints
+    "Mist Blue": "#eef2ff",
+    "Mint": "#ecfdf5",
+    "Blush": "#fff1f2",
 }
 
-# De-duplicate by hex value while preserving first occurrence order
-_unique = {}
+# De-duplicate by hex value while preserving the first occurrence order
+_unique_hex_to_name = {}
 for name, hx in SOLID_PALETTES.items():
-    if hx not in _unique:
-        _unique[hx] = name
-SOLID_PALETTE_OPTIONS = [_unique[hx] for hx in _unique]  # names in stable order
+    hx_norm = str(hx).strip().lower()
+    if hx_norm not in _unique_hex_to_name:
+        _unique_hex_to_name[hx_norm] = name
+
+SOLID_PALETTE_OPTIONS = [_unique_hex_to_name[hx] for hx in _unique_hex_to_name]
 
 # ---------------------------
 # Sidebar
