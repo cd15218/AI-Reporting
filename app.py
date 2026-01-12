@@ -74,7 +74,6 @@ def apply_background_and_theme_css(
     image_mime: str,
     gradient_dark: bool | None
 ):
-    # ---------------- THEME DECISION ----------------
     if mode == "Solid":
         dark = is_dark_hex(solid_hex)
     elif mode == "Gradient":
@@ -82,7 +81,6 @@ def apply_background_and_theme_css(
     else:
         dark = True
 
-    # ---------------- COLOR TOKENS ----------------
     text = "#e5e7eb" if dark else "#0f172a"
     muted = "#cbd5e1" if dark else "#334155"
 
@@ -93,7 +91,6 @@ def apply_background_and_theme_css(
     plot_paper_bg = "rgba(2, 6, 23, 0.18)" if dark else "rgba(255, 255, 255, 0.80)"
     plot_plot_bg = "rgba(2, 6, 23, 0.06)" if dark else "rgba(255, 255, 255, 0.55)"
 
-    # BaseWeb Select menu colors
     menu_bg = "rgba(15, 23, 42, 0.96)" if dark else "rgba(255, 255, 255, 0.98)"
     option_text = "#e5e7eb" if dark else "#0f172a"
     option_hover_bg = "rgba(148, 163, 184, 0.22)" if dark else "rgba(15, 23, 42, 0.10)"
@@ -101,7 +98,6 @@ def apply_background_and_theme_css(
     option_selected_text = "#ffffff" if dark else "#0f172a"
     focus_ring = "rgba(148, 163, 184, 0.40)" if dark else "rgba(15, 23, 42, 0.25)"
 
-    # ---------------- BUILD BACKGROUND STYLE ----------------
     if mode == "Solid":
         bg_style = f"background: {solid_hex} !important;"
     elif mode == "Gradient":
@@ -121,26 +117,22 @@ def apply_background_and_theme_css(
     st.markdown(
         f"""
         <style>
-        /* Keep header so sidebar toggle works */
         header[data-testid="stHeader"] {{
             background: transparent !important;
         }}
 
-        /* Hide deploy / repo controls only */
         [data-testid="stDeployButton"],
         [data-testid="stStatusWidget"],
         [data-testid="stToolbarActions"] {{
             display: none !important;
         }}
 
-        /* --- Most reliable Streamlit background application --- */
         html, body, .stApp,
         [data-testid="stAppViewContainer"],
         [data-testid="stAppViewContainer"] > .main {{
             {bg_style}
         }}
 
-        /* Make sure Streamlit does not paint over the page background */
         [data-testid="stAppViewContainer"] {{
             background-color: transparent !important;
         }}
@@ -149,7 +141,6 @@ def apply_background_and_theme_css(
             padding-top: 0rem;
         }}
 
-        /* Content panel */
         .block-container {{
             background: {card_bg};
             border: 1px solid {border};
@@ -158,7 +149,6 @@ def apply_background_and_theme_css(
             backdrop-filter: blur(8px);
         }}
 
-        /* Global text */
         html, body, [data-testid="stAppViewContainer"] * {{
             color: {text};
         }}
@@ -167,39 +157,33 @@ def apply_background_and_theme_css(
             color: {muted};
         }}
 
-        /* Sidebar panel */
         section[data-testid="stSidebar"] > div {{
             background: {card_bg};
             border-right: 1px solid {border};
         }}
 
-        /* Select input (closed state) */
         div[data-baseweb="select"] > div {{
             background: {widget_bg} !important;
             border: 1px solid {border} !important;
         }}
 
-        /* IMPORTANT: do NOT style file inputs, it can break Streamlit uploader */
         textarea, input:not([type="file"]) {{
             background: {widget_bg} !important;
             border: 1px solid {border} !important;
         }}
 
-        /* Uploader dropzone */
         [data-testid="stFileUploaderDropzone"] {{
             background: {widget_bg};
             border: 1px dashed {border};
             border-radius: 12px;
         }}
 
-        /* Expanders */
         details {{
             background: {widget_bg};
             border: 1px solid {border};
             border-radius: 12px;
         }}
 
-        /* Metric cards */
         [data-testid="stMetric"] {{
             background: {widget_bg};
             border: 1px solid {border};
@@ -207,21 +191,18 @@ def apply_background_and_theme_css(
             padding: 0.6rem;
         }}
 
-        /* Dataframe container */
         [data-testid="stDataFrame"] {{
             border: 1px solid {border};
             border-radius: 12px;
             overflow: hidden;
         }}
 
-        /* Code blocks */
         pre, code {{
             background: {widget_bg} !important;
             border: 1px solid {border} !important;
             border-radius: 10px !important;
         }}
 
-        /* BaseWeb Select dropdown menu */
         div[data-baseweb="popover"] div[data-baseweb="menu"] {{
             background: {menu_bg} !important;
             border: 1px solid {border} !important;
@@ -253,6 +234,15 @@ def apply_background_and_theme_css(
 
         div[data-baseweb="select"] > div:focus-within {{
             box-shadow: 0 0 0 3px {focus_ring} !important;
+        }}
+
+        /* Link style button */
+        .link-btn button {{
+            background: transparent !important;
+            border: none !important;
+            padding: 0 !important;
+            text-decoration: underline !important;
+            cursor: pointer !important;
         }}
         </style>
         """,
@@ -402,8 +392,33 @@ df = basic_clean(df)
 numeric_cols = df.select_dtypes(include="number").columns.tolist()
 categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
 
-st.subheader("Data Preview")
-st.dataframe(df.head(max_preview_rows), use_container_width=True)
+# ---------------- DATA PREVIEW (COMPACT) ----------------
+
+st.subheader("Dataset")
+
+preview_clicked = False
+try:
+    @st.dialog("Dataset Preview")
+    def _preview_dialog(df_to_show: pd.DataFrame, rows: int):
+        st.dataframe(df_to_show.head(rows), use_container_width=True)
+        st.caption(f"Showing the first {rows} rows.")
+
+    cols = st.columns([1, 3])
+    with cols[0]:
+        st.markdown('<div class="link-btn">', unsafe_allow_html=True)
+        preview_clicked = st.button("Preview Dataset", key="preview_dataset_btn")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with cols[1]:
+        st.caption("Opens a popup with the first rows of your dataset.")
+
+    if preview_clicked:
+        _preview_dialog(df, max_preview_rows)
+
+except Exception:
+    with st.expander("Preview Dataset", expanded=False):
+        st.dataframe(df.head(max_preview_rows), use_container_width=True)
+        st.caption(f"Showing the first {max_preview_rows} rows.")
 
 st.divider()
 
