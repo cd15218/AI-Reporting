@@ -3,6 +3,7 @@ import base64
 import pandas as pd
 import plotly.io as pio
 import streamlit as st
+import streamlit.components.v1 as components
 
 from report_ai import build_visuals
 
@@ -114,7 +115,6 @@ def enforce_y_axis_horizontal(fig):
         fig.update_yaxes(tickangle=0, automargin=True)
     except Exception:
         pass
-
     try:
         layout_updates = {}
         if hasattr(fig, "layout") and fig.layout:
@@ -125,7 +125,6 @@ def enforce_y_axis_horizontal(fig):
             fig.update_layout(**layout_updates)
     except Exception:
         pass
-
     return fig
 
 def force_theme(fig, theme: dict):
@@ -288,17 +287,17 @@ def build_paint_icon_uri(stroke_hex: str) -> str:
     paint_svg = f"""
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
       <path d="M12 3c-4.97 0-9 3.58-9 8 0 2.95 1.89 5.52 4.66 6.97.63.33 1.34.03 1.63-.63l.54-1.25c.2-.47.66-.78 1.17-.78h1.77c1.1 0 1.99.89 1.99 1.99v1.55c0 .62.5 1.13 1.12 1.13C20.64 19.99 21 15.4 21 11c0-4.42-4.03-8-9-8Z"
-            stroke="{stroke_hex}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            stroke="{stroke_hex}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
       <path d="M8.4 10.2h.01M11.2 8.6h.01M14.2 10.2h.01M12.8 12.9h.01"
-            stroke="{stroke_hex}" stroke-width="2.8" stroke-linecap="round"/>
+            stroke="{stroke_hex}" stroke-width="3.0" stroke-linecap="round"/>
       <path d="M16.2 14.7l3.1 3.1c.46.46.46 1.2 0 1.66l-.72.72c-.46.46-1.2.46-1.66 0l-3.1-3.1"
-            stroke="{stroke_hex}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            stroke="{stroke_hex}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
     """.strip()
     return "data:image/svg+xml;base64," + base64.b64encode(paint_svg.encode("utf-8")).decode("utf-8")
 
 # ---------------------------
-# CSS
+# CSS + dropdown "sticky selection" JS helper
 # ---------------------------
 
 def apply_css(bg_css: str, palette: dict, text: str, muted: str, icon_uri: str):
@@ -332,14 +331,15 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, icon_uri: str):
         html, body, [data-testid="stAppViewContainer"] * {{ color: {text}; }}
         .stCaption, .stMarkdown p, .stMarkdown li {{ color: {muted}; }}
 
-        /* Tighten spacing under title */
+        /* Tight title + description */
         h1 {{
-            margin-bottom: 0.10rem !important;
-            padding-bottom: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            line-height: 1.08 !important;
         }}
         .title-desc-tight p {{
-            margin-top: 0.02rem !important;
-            margin-bottom: 0.35rem !important;
+            margin: 0.12rem 0 0 0 !important;
+            padding: 0 !important;
         }}
 
         div[data-baseweb="select"] > div,
@@ -356,7 +356,6 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, icon_uri: str):
             background: {palette["menu_bg"]} !important;
             border: 1px solid {palette["border"]} !important;
             border-radius: 12px !important;
-            overflow: hidden !important;
         }}
         div[data-baseweb="popover"] div[data-baseweb="menu"] * {{
             color: {palette["menu_text"]} !important;
@@ -395,12 +394,23 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, icon_uri: str):
             background: {palette["button_hover_bg"]} !important;
         }}
 
-        /* Appearance: borderless circle with icon, no arrow inside */
+        /* --- Appearance control: keep it compact and on same line --- */
+        .appearance-row {{
+            display: flex;
+            justify-content: flex-end;
+            align-items: flex-start;
+        }}
+        [data-testid="stExpander"] {{
+            width: auto !important;
+        }}
+
+        /* Make expander summary a LARGE borderless icon button */
         [data-testid="stExpander"] details > summary {{
-            width: 84px !important;
-            height: 84px !important;
-            min-height: 84px !important;
+            width: 96px !important;
+            height: 96px !important;
+            min-height: 96px !important;
             padding: 0 !important;
+            margin: 0 !important;
             border-radius: 999px !important;
             border: none !important;
             box-shadow: none !important;
@@ -408,20 +418,29 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, icon_uri: str):
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
-            margin-left: auto !important;
         }}
-        [data-testid="stExpander"] details > summary svg {{ display: none !important; }}
-        [data-testid="stExpander"] details > summary p {{ display: none !important; }}
+
+        /* Remove caret arrow INSIDE the circle */
+        [data-testid="stExpander"] details > summary svg {{
+            display: none !important;
+        }}
+        [data-testid="stExpander"] details > summary p {{
+            display: none !important;
+        }}
+
+        /* Center the icon perfectly */
         [data-testid="stExpander"] details > summary::before {{
             content: "" !important;
             display: block !important;
-            width: 54px !important;
-            height: 54px !important;
+            width: 64px !important;
+            height: 64px !important;
             background-image: url("{icon_uri}") !important;
             background-size: contain !important;
             background-repeat: no-repeat !important;
             background-position: center !important;
         }}
+
+        /* Optional subtle hover */
         [data-testid="stExpander"] details > summary:hover {{
             background: rgba(255,255,255,0.06) !important;
         }}
@@ -442,6 +461,54 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, icon_uri: str):
         unsafe_allow_html=True,
     )
 
+def inject_dropdown_scroll_to_selected():
+    # This makes every selectbox menu jump to the currently selected option when opened.
+    components.html(
+        """
+        <script>
+        (function() {
+          if (window.__dropdownStickyApplied) return;
+          window.__dropdownStickyApplied = true;
+
+          function scrollSelected(menuEl) {
+            if (!menuEl) return;
+            const selected =
+              menuEl.querySelector('[role="option"][aria-selected="true"]') ||
+              menuEl.querySelector('[role="option"][data-selected="true"]') ||
+              menuEl.querySelector('[role="option"][aria-checked="true"]');
+
+            if (selected && selected.scrollIntoView) {
+              selected.scrollIntoView({ block: "center" });
+            }
+          }
+
+          const obs = new MutationObserver((mutations) => {
+            for (const m of mutations) {
+              for (const node of m.addedNodes || []) {
+                if (!(node instanceof HTMLElement)) continue;
+
+                // Baseweb popover menu container
+                const menu =
+                  node.querySelector?.('div[data-baseweb="menu"]') ||
+                  (node.matches?.('div[data-baseweb="menu"]') ? node : null);
+
+                if (menu) {
+                  // allow DOM paint then scroll
+                  setTimeout(() => scrollSelected(menu), 0);
+                  setTimeout(() => scrollSelected(menu), 50);
+                }
+              }
+            }
+          });
+
+          obs.observe(document.body, { childList: true, subtree: true });
+        })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
 # ---------------------------
 # Defaults
 # ---------------------------
@@ -449,9 +516,9 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, icon_uri: str):
 if "bg_mode_top" not in st.session_state:
     st.session_state["bg_mode_top"] = "Gradient"
 if "solid_choice_top" not in st.session_state:
-    st.session_state["solid_choice_top"] = SOLID_PALETTE_OPTIONS[0] if SOLID_PALETTE_OPTIONS else "Slate"
+    st.session_state["solid_choice_top"] = list(SOLID_PALETTES.keys())[0]
 if "solid_picker_top" not in st.session_state:
-    st.session_state["solid_picker_top"] = SOLID_PALETTES.get(st.session_state["solid_choice_top"], "#0f172a")
+    st.session_state["solid_picker_top"] = SOLID_PALETTES[st.session_state["solid_choice_top"]]
 if "grad_a_top" not in st.session_state:
     st.session_state["grad_a_top"] = "#0b1020"
 if "grad_b_top" not in st.session_state:
@@ -460,24 +527,26 @@ if "grad_angle_top" not in st.session_state:
     st.session_state["grad_angle_top"] = 135
 
 # ---------------------------
-# Title + description (tight)
+# Title row with appearance on SAME LINE
 # ---------------------------
 
-st.markdown("# Dataset Reporting")
-st.markdown("<div class='title-desc-tight'>", unsafe_allow_html=True)
-st.markdown("Upload a CSV or Excel file to generate key statistics and charts.")
-st.markdown("</div>", unsafe_allow_html=True)
+title_col, appearance_col = st.columns([7, 1], vertical_alignment="top")
 
-# Theme controls (render early)
-_, icon_wrap = st.columns([7, 1], vertical_alignment="top")
-with icon_wrap:
+with title_col:
+    st.markdown("# Dataset Reporting")
+    st.markdown("<div class='title-desc-tight'>", unsafe_allow_html=True)
+    st.markdown("Upload a CSV or Excel file to generate key statistics and charts.")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+with appearance_col:
+    st.markdown("<div class='appearance-row'>", unsafe_allow_html=True)
     with st.expander(" ", expanded=False):
         bg_mode = st.selectbox("Background Type", ["Solid", "Gradient", "Image"], index=1, key="bg_mode_top")
 
         if bg_mode == "Solid":
             st.selectbox(
                 "Solid Palette",
-                SOLID_PALETTE_OPTIONS,
+                list(SOLID_PALETTES.keys()),
                 index=0,
                 key="solid_choice_top",
                 on_change=_sync_solid_picker,
@@ -501,6 +570,7 @@ with icon_wrap:
                 type=["png", "jpg", "jpeg", "webp"],
                 key="bg_image_top",
             )
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------------------------
 # Theme construction
@@ -508,7 +578,7 @@ with icon_wrap:
 
 bg_mode = st.session_state.get("bg_mode_top", "Gradient")
 img_upload = st.session_state.get("bg_image_top", None)
-solid_choice = st.session_state.get("solid_choice_top", SOLID_PALETTE_OPTIONS[0] if SOLID_PALETTE_OPTIONS else "Slate")
+solid_choice = st.session_state.get("solid_choice_top", list(SOLID_PALETTES.keys())[0])
 solid_picker = st.session_state.get("solid_picker_top", SOLID_PALETTES.get(solid_choice, "#0f172a"))
 grad_a = st.session_state.get("grad_a_top", "#0b1020")
 grad_b = st.session_state.get("grad_b_top", "#123055")
@@ -569,6 +639,9 @@ palette = {
 
 icon_uri = build_paint_icon_uri(page_text)
 apply_css(bg_css, palette, page_text, page_muted, icon_uri)
+
+# Make dropdowns jump to selected option on open
+inject_dropdown_scroll_to_selected()
 
 plotly_template = "plotly_dark" if dark else "plotly_white"
 pio.templates.default = plotly_template
@@ -666,7 +739,7 @@ numeric_cols = df.select_dtypes(include="number").columns.tolist()
 categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
 
 # ---------------------------
-# Key Statistics (compact KPI control on left)
+# Key Statistics (compact KPI selector on left, defaults not None)
 # ---------------------------
 
 st.subheader("Key Statistics")
@@ -794,7 +867,7 @@ with rad_chart:
         st.info("Add a categorical column to see the radial chart.")
 
 # ---------------------------
-# Tabs (defaults not None for all)
+# Tabs
 # ---------------------------
 
 tabs = st.tabs(["Tables", "Distribution", "Scatter Plot", "Bar Chart", "Heatmap", "Export"])
@@ -822,9 +895,7 @@ with tabs[2]:
 
     with controls:
         if numeric_cols:
-            sx_default, sy_default = default_two_distinct(numeric_cols)
             scatter_x = st.selectbox("X Axis (Numeric)", options=numeric_cols, index=0, key="scatter_x")
-            # ensure y defaults to second column if possible
             y_index = 1 if len(numeric_cols) > 1 else 0
             scatter_y = st.selectbox("Y Axis (Numeric)", options=numeric_cols, index=y_index, key="scatter_y")
         else:
