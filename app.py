@@ -25,6 +25,7 @@ def basic_clean(df: pd.DataFrame) -> pd.DataFrame:
     df.columns = [str(c).strip() for c in df.columns]
     return df
 
+# ---------------- SIDEBAR ----------------
 with st.sidebar:
     st.header("Inputs")
 
@@ -64,39 +65,55 @@ df = basic_clean(df)
 numeric_cols = df.select_dtypes(include="number").columns.tolist()
 categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
 
+# ---------------- CHART CONTROLS ----------------
 with st.sidebar:
     st.header("Chart controls")
 
+    # ---- KPI / SUMMARY ----
+    st.subheader("Key statistics")
     primary_numeric = st.selectbox(
         "Primary numeric column (KPIs)",
         options=["None"] + numeric_cols
     )
 
+    st.divider()
+
+    # ---- NUMERIC CHARTS ----
+    st.subheader("Numeric comparison chart")
     scatter_x = st.selectbox(
-        "Scatter X axis",
+        "X axis (numeric)",
         options=["None"] + numeric_cols
     )
 
     scatter_y = st.selectbox(
-        "Scatter Y axis",
+        "Y axis (numeric)",
         options=["None"] + numeric_cols
     )
 
+    st.divider()
+
+    # ---- CATEGORICAL VOLUME ----
+    st.subheader("Categorical volume chart")
     category_volume_col = st.selectbox(
-        "Category volume column",
+        "Category column",
         options=["None"] + categorical_cols
     )
 
+    st.divider()
+
+    # ---- CATEGORICAL COMPARISON ----
+    st.subheader("Categorical comparison chart")
     category_compare_a = st.selectbox(
-        "Category comparison A",
+        "Category A",
         options=["None"] + categorical_cols
     )
 
     category_compare_b = st.selectbox(
-        "Category comparison B",
+        "Category B",
         options=["None"] + categorical_cols
     )
 
+# ---------------- MAIN PAGE ----------------
 st.subheader("Data preview")
 st.dataframe(df.head(max_preview_rows), use_container_width=True)
 
@@ -116,7 +133,7 @@ summary, visuals, numeric_df, categorical_df = build_visuals(
     max_categories=max_categories
 )
 
-# ---------- REPORT SUMMARY ----------
+# ---------------- SUMMARY ----------------
 st.subheader("Key statistics")
 
 k1, k2, k3, k4 = st.columns(4)
@@ -134,7 +151,6 @@ else:
     k4.metric("Maximum", "N/A")
 
 k5, k6, k7, k8 = st.columns(4)
-
 k5.metric("Total rows", summary["rows"])
 k6.metric("Numeric columns", summary["numeric_count"])
 k7.metric("Categorical columns", summary["categorical_count"])
@@ -146,7 +162,7 @@ with st.expander("Numeric statistics table"):
 with st.expander("Categorical statistics table"):
     st.dataframe(categorical_df, use_container_width=True)
 
-# ---------- CHARTS ----------
+# ---------------- CHARTS ----------------
 st.subheader("Visualizations")
 
 if visuals:
@@ -155,7 +171,7 @@ if visuals:
 else:
     st.info("No charts generated. Select columns in the sidebar.")
 
-# ---------- EXPORT ----------
+# ---------------- EXPORT ----------------
 st.subheader("Export")
 st.write("Download your cleaned dataset for use in GraphMaker.ai or other visualization tools.")
 
