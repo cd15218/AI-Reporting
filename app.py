@@ -61,13 +61,11 @@ def apply_background_and_theme_css(
     image_b64: str,
     image_mime: str
 ):
-    # Decide light vs dark for text + chart template
     if mode == "Solid":
         dark = is_dark_hex(solid_hex)
     elif mode == "Gradient":
         dark = "ffffff" not in (gradient_css or "").lower()
     else:
-        # Image backgrounds are unpredictable: treat as dark, keep readable panel
         dark = True
 
     text = "#e5e7eb" if dark else "#0f172a"
@@ -76,7 +74,6 @@ def apply_background_and_theme_css(
     border = "rgba(148, 163, 184, 0.35)" if dark else "rgba(15, 23, 42, 0.15)"
     widget_bg = "rgba(255,255,255,0.06)" if dark else "rgba(15,23,42,0.06)"
 
-    # Background CSS (avoid invalid image CSS when no image is uploaded)
     if mode == "Solid":
         bg_css = f"background: {solid_hex} !important;"
     elif mode == "Gradient":
@@ -95,7 +92,7 @@ def apply_background_and_theme_css(
     st.markdown(
         f"""
         <style>
-        /* Hide Streamlit header/toolbar (can appear as a GitHub/repo bar on hosted apps) */
+        /* Hide Streamlit header/toolbar (can appear as repo/GitHub bar) */
         header[data-testid="stHeader"] {{
             display: none;
         }}
@@ -142,14 +139,26 @@ def apply_background_and_theme_css(
             border-right: 1px solid {border};
         }}
 
-        /* Inputs and widgets */
+        /* Select widgets */
         div[data-baseweb="select"] > div {{
             background: {widget_bg} !important;
             border: 1px solid {border} !important;
         }}
-        textarea, input {{
+
+        /* IMPORTANT: do NOT style file inputs, it can break Streamlit uploader */
+        textarea, input:not([type="file"]) {{
             background: {widget_bg} !important;
             border: 1px solid {border} !important;
+        }}
+
+        /* Make uploader area/button readable */
+        [data-testid="stFileUploaderDropzone"] {{
+            background: {widget_bg} !important;
+            border: 1px dashed {border} !important;
+            border-radius: 12px !important;
+        }}
+        [data-testid="stFileUploaderDropzone"] * {{
+            color: {text} !important;
         }}
 
         /* Expanders */
@@ -241,7 +250,7 @@ with st.sidebar:
     max_preview_rows = st.slider("Preview rows", 5, 100, 25, key="preview_rows")
     max_categories = st.slider("Max categories per chart", 5, 50, 20, key="max_categories")
 
-# Resolve background settings
+# Resolve theme inputs
 solid_hex = "#0f172a"
 if bg_mode == "Solid":
     solid_hex = solid_palettes.get(solid_choice or "Slate", "#0f172a")
@@ -322,7 +331,6 @@ summary, visuals_kpi, numeric_df, categorical_df = build_visuals(
 
 with right:
     k1, k2, k3, k4 = st.columns(4)
-
     if summary["primary_numeric_column"]:
         col = summary["primary_numeric_column"]
         k1.metric(f"Average {col}", summary["mean"])
@@ -360,7 +368,6 @@ st.divider()
 
 st.subheader("Visualizations")
 
-# Session state defaults
 for key, default in [
     ("scatter_x", "None"),
     ("scatter_y", "None"),
