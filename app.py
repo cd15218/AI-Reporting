@@ -108,15 +108,32 @@ def safe_len(x) -> int:
         except Exception:
             return 0
 
-def force_all_yaxis_tickangle_zero(fig):
-    # yaxis, yaxis2, yaxis3, ...
+def enforce_y_axis_horizontal(fig):
+    """
+    Force all Y-axis tick labels horizontal (tickangle=0) without touching X-axis.
+    Applies to yaxis, yaxis2, yaxis3, etc.
+    """
+    if fig is None:
+        return fig
+    try:
+        # Primary y-axis for most charts
+        fig.update_yaxes(tickangle=0)
+    except Exception:
+        pass
+
+    # Multi-axis cases: yaxis2, yaxis3...
     try:
         if hasattr(fig, "layout") and fig.layout:
             for k in list(fig.layout.keys()):
-                if k.startswith("yaxis"):
-                    fig.layout[k].update(tickangle=0)
+                if isinstance(k, str) and k.startswith("yaxis"):
+                    try:
+                        fig.layout[k].update(tickangle=0)
+                    except Exception:
+                        pass
     except Exception:
         pass
+
+    return fig
 
 def force_theme(fig, theme: dict):
     fig.update_layout(
@@ -131,22 +148,19 @@ def force_theme(fig, theme: dict):
     )
 
     try:
+        # Do NOT set tickangle for x-axis here (leave it alone)
         fig.update_xaxes(
             tickfont=dict(color=theme["text"]),
             title_font=dict(color=theme["text"]),
             gridcolor=theme["border"],
-            tickangle=0,
         )
         fig.update_yaxes(
             tickfont=dict(color=theme["text"]),
             title_font=dict(color=theme["text"]),
             gridcolor=theme["border"],
-            tickangle=0,
         )
     except Exception:
         pass
-
-    force_all_yaxis_tickangle_zero(fig)
 
     shade_idx = 0
     for tr in fig.data:
@@ -211,7 +225,6 @@ def force_theme(fig, theme: dict):
                 except Exception:
                     pass
 
-    force_all_yaxis_tickangle_zero(fig)
     return fig
 
 def apply_css(bg_css: str, dark: bool, palette: dict, text: str, muted: str):
@@ -328,7 +341,7 @@ def compute_numeric_stats(df: pd.DataFrame, col: str) -> dict:
     }
 
 # ---------------------------
-# Solid palettes (expanded + de-duplicated)
+# Solid palettes
 # ---------------------------
 
 SOLID_PALETTES = {
@@ -643,7 +656,8 @@ with rad_chart:
         )
         fig = get_fig(visuals_radial_kpi, "radial_donut")
         if fig is not None:
-            st.plotly_chart(force_theme(fig, theme), use_container_width=True, key="chart_kpi_radial_donut")
+            fig = enforce_y_axis_horizontal(force_theme(fig, theme))
+            st.plotly_chart(fig, use_container_width=True, key="chart_kpi_radial_donut")
             st.caption("Colors use different shades of the active theme accent.")
         else:
             st.info("Select a valid category column to generate the radial chart.")
@@ -675,7 +689,8 @@ with tabs[1]:
     if primary_numeric != "None":
         fig = get_fig(visuals_kpi, "numeric_distribution")
         if fig is not None:
-            st.plotly_chart(force_theme(fig, theme), use_container_width=True, key="chart_kpi_distribution")
+            fig = enforce_y_axis_horizontal(force_theme(fig, theme))
+            st.plotly_chart(fig, use_container_width=True, key="chart_kpi_distribution")
         else:
             st.info("No distribution chart available for the current selection.")
     else:
@@ -710,7 +725,8 @@ with tabs[2]:
     with chart:
         fig = get_fig(visuals, "numeric_scatter")
         if fig is not None:
-            st.plotly_chart(force_theme(fig, theme), use_container_width=True, key="chart_scatter")
+            fig = enforce_y_axis_horizontal(force_theme(fig, theme))
+            st.plotly_chart(fig, use_container_width=True, key="chart_scatter")
         else:
             st.info("Select two different numeric columns to generate the scatter plot.")
 
@@ -742,7 +758,8 @@ with tabs[3]:
     with chart:
         fig = get_fig(visuals, "category_volume")
         if fig is not None:
-            st.plotly_chart(force_theme(fig, theme), use_container_width=True, key="chart_category_volume")
+            fig = enforce_y_axis_horizontal(force_theme(fig, theme))
+            st.plotly_chart(fig, use_container_width=True, key="chart_category_volume")
         else:
             st.info("Select a categorical column to generate the bar chart.")
 
@@ -775,7 +792,8 @@ with tabs[4]:
     with chart:
         fig = get_fig(visuals, "category_heatmap")
         if fig is not None:
-            st.plotly_chart(force_theme(fig, theme), use_container_width=True, key="chart_heatmap")
+            fig = enforce_y_axis_horizontal(force_theme(fig, theme))
+            st.plotly_chart(fig, use_container_width=True, key="chart_heatmap")
         else:
             st.info("Select two different categorical columns to generate the heatmap.")
 
