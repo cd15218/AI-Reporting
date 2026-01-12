@@ -1,301 +1,242 @@
 # app.py
-import streamlit as st
-import pandas as pd
 import base64
+import pandas as pd
 import plotly.io as pio
+import streamlit as st
+
 from report_ai import build_visuals
+
 
 st.set_page_config(
     page_title="Dataset Reporting",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
-# ---------------- HELPER FUNCTIONS ----------------
+# ---------------------------
+# Small, reusable helpers
+# ---------------------------
 
-def load_file_to_df(uploaded_file) -> pd.DataFrame:
+def read_df(uploaded_file: st.runtime.uploaded_file_manager.UploadedFile) -> pd.DataFrame:
     name = uploaded_file.name.lower()
     if name.endswith(".csv"):
-        return pd.read_csv(uploaded_file)
-    if name.endswith(".xlsx") or name.endswith(".xls"):
-        return pd.read_excel(uploaded_file)
-    raise ValueError("Unsupported file type. Please upload a CSV or Excel file.")
-
-def basic_clean(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    df = df.dropna(axis=1, how="all")
-    df = df.drop_duplicates()
+        df = pd.read_csv(uploaded_file)
+    elif name.endswith(".xlsx") or name.endswith(".xls"):
+        df = pd.read_excel(uploaded_file)
+    else:
+        raise ValueError("Unsupported file type. Upload a CSV or Excel file.")
+    df = df.dropna(axis=1, how="all").drop_duplicates()
     df.columns = [str(c).strip() for c in df.columns]
     return df
 
-def get_fig(visuals, key: str):
-    for name, fig in visuals:
-        if name == key:
-            return fig
-    return None
+def b64_image(uploaded_image) -> tuple[str, str]:
+    if not uploaded_image:
+        return "", "image/png"
+    return base64.b64encode(uploaded_image.getvalue()).decode("utf-8"), uploaded_image.type
 
-def image_file_to_base64(uploaded_image) -> str:
-    if uploaded_image is None:
-        return ""
-    return base64.b64encode(uploaded_image.getvalue()).decode("utf-8")
-
-def _hex_to_rgb(hex_color: str):
-    h = hex_color.lstrip("#")
+def hex_to_rgb(h: str) -> tuple[int, int, int]:
+    h = h.lstrip("#")
     if len(h) == 3:
         h = "".join([c * 2 for c in h])
-    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+    return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
 
-def _rgb_to_hex(rgb):
-    r, g, b = rgb
-    return "#{:02x}{:02x}{:02x}".format(
-        max(0, min(255, int(r))),
-        max(0, min(255, int(g))),
-        max(0, min(255, int(b)))
-    )
-
-def _relative_luminance(rgb):
-    def channel(c):
+def rel_lum(rgb: tuple[int, int, int]) -> float:
+    def ch(c):
         c = c / 255.0
         return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
     r, g, b = rgb
-    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+    return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b)
 
-def is_dark_hex(hex_color: str) -> bool:
+def is_dark(hex_color: str) -> bool:
     try:
-        return _relative_luminance(_hex_to_rgb(hex_color)) < 0.40
+        return rel_lum(hex_to_rgb(hex_color)) < 0.40
     except Exception:
         return True
 
-def is_dark_gradient(hex_a: str, hex_b: str) -> bool:
+def is_dark_grad(a: str, b: str) -> bool:
     try:
-        lum_a = _relative_luminance(_hex_to_rgb(hex_a))
-        lum_b = _relative_luminance(_hex_to_rgb(hex_b))
-        return ((lum_a + lum_b) / 2.0) < 0.40
+        return ((rel_lum(hex_to_rgb(a)) + rel_lum(hex_to_rgb(b))) / 2.0) < 0.40
     except Exception:
         return True
 
-def _mix_rgb(a, b, t: float):
+def mix(a: tuple[int, int, int], b: tuple[int, int, int], t: float) -> tuple[int, int, int]:
     return (
-        a[0] + (b[0] - a[0]) * t,
-        a[1] + (b[1] - a[1]) * t,
-        a[2] + (b[2] - a[2]) * t
+        int(a[0] + (b[0] - a[0]) * t),
+        int(a[1] + (b[1] - a[1]) * t),
+        int(a[2] + (b[2] - a[2]) * t),
     )
 
-def generate_shades(base_hex: str, n: int, dark_mode: bool) -> list[str]:
-    try:
-        base = _hex_to_rgb(base_hex)
-    except Exception:
-        base = (59, 130, 246)  # fallback blue
+def rgb_to_hex(rgb: tuple[int, int, int]) -> str:
+    r, g, b = rgb
+    return f"#{r:02x}{g:02x}{b:02x}"
 
+def shades(base_hex: str, n: int, dark_mode: bool) -> list[str]:
+    try:
+        base = hex_to_rgb(base_hex)
+    except Exception:
+        base = (59, 130, 246)
     if dark_mode:
-        target_a = base
-        target_b = (245, 245, 245)
         ts = [0.05 + (i / max(1, n - 1)) * 0.75 for i in range(n)]
-        rgbs = [_mix_rgb(target_a, target_b, t) for t in ts]
+        rgbs = [mix(base, (245, 245, 245), t) for t in ts]
     else:
-        target_a = (250, 250, 250)
-        target_b = base
         ts = [0.20 + (i / max(1, n - 1)) * 0.70 for i in range(n)]
-        rgbs = [_mix_rgb(target_a, target_b, t) for t in ts]
+        rgbs = [mix((250, 250, 250), base, t) for t in ts]
+    return [rgb_to_hex(x) for x in rgbs]
 
-    return [_rgb_to_hex(rgb) for rgb in rgbs]
-
-def build_colorscale(shades: list[str]) -> list:
-    if not shades:
+def colorscale(sh: list[str]) -> list[tuple[float, str]]:
+    if not sh:
         return [(0.0, "#93c5fd"), (1.0, "#1d4ed8")]
-    if len(shades) == 1:
-        return [(0.0, shades[0]), (1.0, shades[0])]
-    steps = len(shades) - 1
-    return [(i / steps, c) for i, c in enumerate(shades)]
+    if len(sh) == 1:
+        return [(0.0, sh[0]), (1.0, sh[0])]
+    steps = len(sh) - 1
+    return [(i / steps, c) for i, c in enumerate(sh)]
 
-def _safe_set(obj, path: list[str], value):
+def get_fig(visuals, name: str):
+    for k, fig in visuals:
+        if k == name:
+            return fig
+    return None
+
+def force_theme(fig, theme: dict):
+    """
+    Forces ALL chart colors to match the active theme.
+    Bar: per category shades
+    Scatter: accent
+    Heatmap: continuous colorscale
+    """
+    fig.update_layout(
+        template=theme["plotly_template"],
+        paper_bgcolor=theme["paper_bg"],
+        plot_bgcolor=theme["plot_bg"],
+        font=dict(color=theme["text"]),
+        title=dict(font=dict(color=theme["text"])),
+        legend=dict(font=dict(color=theme["text"]), title=dict(font=dict(color=theme["text"]))),
+        margin=dict(t=70, l=35, r=35, b=35),
+        colorway=theme["shades"],
+    )
     try:
-        cur = obj
-        for i, key in enumerate(path):
-            if i == len(path) - 1:
-                setattr(cur, key, value)
-                return True
-            nxt = getattr(cur, key, None)
-            if nxt is None:
-                try:
-                    setattr(cur, key, {})
-                    nxt = getattr(cur, key, None)
-                except Exception:
-                    return False
-            cur = nxt
-        return False
+        fig.update_xaxes(tickfont=dict(color=theme["text"]), title_font=dict(color=theme["text"]), gridcolor=theme["border"])
+        fig.update_yaxes(tickfont=dict(color=theme["text"]), title_font=dict(color=theme["text"]), gridcolor=theme["border"])
     except Exception:
-        return False
+        pass
 
-def apply_background_and_theme_css(
-    mode: str,
-    solid_hex: str,
-    gradient_css: str,
-    image_b64: str,
-    image_mime: str,
-    gradient_dark: bool | None,
-    accent_hex: str
-):
-    if mode == "Solid":
-        dark = is_dark_hex(solid_hex)
-    elif mode == "Gradient":
-        dark = True if gradient_dark is None else gradient_dark
-    else:
-        dark = True
+    shade_idx = 0
+    for tr in fig.data:
+        t = (getattr(tr, "type", "") or "").lower()
 
+        if t == "pie":
+            n = len(getattr(tr, "labels", []) or []) or len(getattr(tr, "values", []) or []) or 12
+            tr.marker = tr.marker or {}
+            tr.marker.colors = theme["shades"][:max(1, min(n, len(theme["shades"])))]
+            tr.marker.line = dict(width=1, color=theme["border"])
+
+        elif t == "bar":
+            tr.marker = tr.marker or {}
+            x = getattr(tr, "x", None)
+            y = getattr(tr, "y", None)
+            n = len(x) if x is not None else (len(y) if y is not None else 0)
+            if n > 0:
+                tr.marker.color = [theme["shades"][i % len(theme["shades"])] for i in range(n)]
+            else:
+                tr.marker.color = theme["shades"][shade_idx % len(theme["shades"])]
+            tr.marker.line = dict(width=0.7, color=theme["border"])
+            shade_idx += 1
+
+        elif t == "scatter":
+            tr.marker = tr.marker or {}
+            tr.marker.color = theme["accent"]
+            tr.marker.line = dict(width=0.7, color=theme["border"])
+            if getattr(tr, "mode", "") and "lines" in str(getattr(tr, "mode", "")):
+                tr.line = tr.line or {}
+                tr.line.color = theme["accent"]
+
+        elif t == "histogram":
+            tr.marker = tr.marker or {}
+            tr.marker.color = theme["shades"][4] if len(theme["shades"]) > 4 else theme["accent"]
+            tr.marker.line = dict(width=0.7, color=theme["border"])
+
+        elif t in {"heatmap", "contour", "histogram2d", "histogram2dcontour"}:
+            try:
+                tr.colorscale = theme["colorscale"]
+            except Exception:
+                pass
+
+        else:
+            marker = getattr(tr, "marker", None)
+            if marker is not None:
+                try:
+                    marker.color = theme["accent"]
+                except Exception:
+                    pass
+
+    return fig
+
+def apply_css(bg_css: str, dark: bool, palette: dict):
     text = "#e5e7eb" if dark else "#0f172a"
     muted = "#cbd5e1" if dark else "#334155"
-
-    card_bg = "rgba(2, 6, 23, 0.58)" if dark else "rgba(255, 255, 255, 0.92)"
-    border = "rgba(148, 163, 184, 0.35)" if dark else "rgba(15, 23, 42, 0.16)"
-    widget_bg = "rgba(255,255,255,0.06)" if dark else "rgba(15,23,42,0.06)"
-
-    plot_paper_bg = "rgba(2, 6, 23, 0.18)" if dark else "rgba(255, 255, 255, 0.80)"
-    plot_plot_bg = "rgba(2, 6, 23, 0.06)" if dark else "rgba(255, 255, 255, 0.55)"
-
-    menu_bg = "rgba(15, 23, 42, 0.96)" if dark else "rgba(255, 255, 255, 0.98)"
-    option_text = "#e5e7eb" if dark else "#0f172a"
-    option_hover_bg = "rgba(148, 163, 184, 0.22)" if dark else "rgba(15, 23, 42, 0.10)"
-    option_selected_bg = "rgba(148, 163, 184, 0.30)" if dark else "rgba(15, 23, 42, 0.14)"
-    option_selected_text = "#ffffff" if dark else "#0f172a"
-    focus_ring = "rgba(148, 163, 184, 0.40)" if dark else "rgba(15, 23, 42, 0.25)"
-
-    if mode == "Solid":
-        bg_style = f"background: {solid_hex} !important;"
-    elif mode == "Gradient":
-        bg_style = f"background-image: {gradient_css} !important; background-attachment: fixed !important;"
-    else:
-        if image_b64:
-            bg_style = f"""
-                background-image: url("data:{image_mime};base64,{image_b64}") !important;
-                background-size: cover !important;
-                background-position: center !important;
-                background-repeat: no-repeat !important;
-                background-attachment: fixed !important;
-            """
-        else:
-            bg_style = "background: #0f172a !important;"
-
     st.markdown(
         f"""
         <style>
-        header[data-testid="stHeader"] {{
-            background: transparent !important;
-        }}
-
-        [data-testid="stDeployButton"],
-        [data-testid="stStatusWidget"],
-        [data-testid="stToolbarActions"] {{
-            display: none !important;
-        }}
+        header[data-testid="stHeader"] {{ background: transparent !important; }}
+        [data-testid="stDeployButton"], [data-testid="stStatusWidget"], [data-testid="stToolbarActions"] {{ display:none !important; }}
 
         html, body, .stApp,
         [data-testid="stAppViewContainer"],
         [data-testid="stAppViewContainer"] > .main {{
-            {bg_style}
+            {bg_css}
         }}
 
-        [data-testid="stAppViewContainer"] {{
-            background-color: transparent !important;
-        }}
-        [data-testid="stAppViewContainer"] > .main {{
-            background-color: transparent !important;
-            padding-top: 0rem;
-        }}
+        [data-testid="stAppViewContainer"] {{ background-color: transparent !important; }}
+        [data-testid="stAppViewContainer"] > .main {{ background-color: transparent !important; padding-top: 0rem; }}
 
         .block-container {{
-            background: {card_bg};
-            border: 1px solid {border};
+            background: {palette["card_bg"]};
+            border: 1px solid {palette["border"]};
             border-radius: 18px;
             padding: 1.2rem;
             backdrop-filter: blur(8px);
         }}
 
-        html, body, [data-testid="stAppViewContainer"] * {{
-            color: {text};
-        }}
-
-        .stCaption, .stMarkdown p, .stMarkdown li {{
-            color: {muted};
-        }}
+        html, body, [data-testid="stAppViewContainer"] * {{ color: {text}; }}
+        .stCaption, .stMarkdown p, .stMarkdown li {{ color: {muted}; }}
 
         section[data-testid="stSidebar"] > div {{
-            background: {card_bg};
-            border-right: 1px solid {border};
+            background: {palette["card_bg"]};
+            border-right: 1px solid {palette["border"]};
         }}
 
-        div[data-baseweb="select"] > div {{
-            background: {widget_bg} !important;
-            border: 1px solid {border} !important;
-        }}
-
+        div[data-baseweb="select"] > div,
         textarea, input:not([type="file"]) {{
-            background: {widget_bg} !important;
-            border: 1px solid {border} !important;
+            background: {palette["widget_bg"]} !important;
+            border: 1px solid {palette["border"]} !important;
         }}
 
         [data-testid="stFileUploaderDropzone"] {{
-            background: {widget_bg};
-            border: 1px dashed {border};
-            border-radius: 12px;
-        }}
-
-        details {{
-            background: {widget_bg};
-            border: 1px solid {border};
+            background: {palette["widget_bg"]};
+            border: 1px dashed {palette["border"]};
             border-radius: 12px;
         }}
 
         [data-testid="stMetric"] {{
-            background: {widget_bg};
-            border: 1px solid {border};
+            background: {palette["widget_bg"]};
+            border: 1px solid {palette["border"]};
             border-radius: 14px;
             padding: 0.6rem;
         }}
 
-        [data-testid="stDataFrame"] {{
-            border: 1px solid {border};
-            border-radius: 12px;
-            overflow: hidden;
-        }}
-
-        pre, code {{
-            background: {widget_bg} !important;
-            border: 1px solid {border} !important;
-            border-radius: 10px !important;
-        }}
-
         div[data-baseweb="popover"] div[data-baseweb="menu"] {{
-            background: {menu_bg} !important;
-            border: 1px solid {border} !important;
+            background: {palette["menu_bg"]} !important;
+            border: 1px solid {palette["border"]} !important;
             border-radius: 12px !important;
             overflow: hidden !important;
         }}
 
-        div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"] {{
-            color: {option_text} !important;
-            background: transparent !important;
-        }}
-
-        div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"]:hover,
-        div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"][data-highlighted="true"],
-        div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"][aria-selected="false"][data-highlighted="true"] {{
-            background: {option_hover_bg} !important;
-            color: {option_text} !important;
-        }}
-
-        div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"][aria-selected="true"] {{
-            background: {option_selected_bg} !important;
-            color: {option_selected_text} !important;
-            font-weight: 600 !important;
-        }}
-
-        div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"] * {{
-            color: inherit !important;
+        div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"]:hover {{
+            background: {palette["hover_bg"]} !important;
         }}
 
         div[data-baseweb="select"] > div:focus-within {{
-            box-shadow: 0 0 0 3px {focus_ring} !important;
+            box-shadow: 0 0 0 3px {palette["focus_ring"]} !important;
         }}
 
         .link-btn button {{
@@ -307,138 +248,12 @@ def apply_background_and_theme_css(
         }}
         </style>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
-    plotly_template = "plotly_dark" if dark else "plotly_white"
-
-    shades = generate_shades(accent_hex, 12, dark)
-    continuous_scale = build_colorscale(shades)
-
-    theme = {
-        "dark": dark,
-        "text": text,
-        "muted": muted,
-        "border": border,
-        "card_bg": card_bg,
-        "widget_bg": widget_bg,
-        "plot_paper_bg": plot_paper_bg,
-        "plot_plot_bg": plot_plot_bg,
-        "plotly_template": plotly_template,
-        "accent": accent_hex,
-        "shades": shades,
-        "continuous_scale": continuous_scale,
-    }
-
-    return plotly_template, theme
-
-def apply_plotly_theme_all(fig, theme: dict):
-    """
-    Forces theme styling for ALL charts, overriding existing colors set upstream.
-    """
-    fig.update_layout(
-        template=theme["plotly_template"],
-        paper_bgcolor=theme["plot_paper_bg"],
-        plot_bgcolor=theme["plot_plot_bg"],
-        font=dict(color=theme["text"]),
-        title=dict(font=dict(color=theme["text"])),
-        legend=dict(font=dict(color=theme["text"]), title=dict(font=dict(color=theme["text"]))),
-        margin=dict(t=72, l=40, r=40, b=40),
-        colorway=theme["shades"],
-    )
-
-    try:
-        fig.update_xaxes(title_font=dict(color=theme["text"]), tickfont=dict(color=theme["text"]), gridcolor=theme["border"])
-        fig.update_yaxes(title_font=dict(color=theme["text"]), tickfont=dict(color=theme["text"]), gridcolor=theme["border"])
-    except Exception:
-        pass
-
-    # Sequential assignment for multi-trace figures (bars grouped, multiple scatters, etc.)
-    shade_idx = 0
-
-    for tr in fig.data:
-        t = getattr(tr, "type", "") or ""
-
-        # Pie/Donut
-        if t == "pie":
-            try:
-                n = len(getattr(tr, "labels", []) or [])
-                if n <= 0:
-                    # fallback: try to infer from values
-                    n = len(getattr(tr, "values", []) or []) or 12
-                colors = theme["shades"][:max(1, min(n, len(theme["shades"])))]
-                _safe_set(tr, ["marker", "colors"], colors)
-                _safe_set(tr, ["marker", "line"], dict(width=1, color=theme["border"]))
-                _safe_set(tr, ["textfont", "color"], theme["text"])
-            except Exception:
-                pass
-
-        # Bar
-        elif t == "bar":
-            try:
-                x = getattr(tr, "x", None)
-                y = getattr(tr, "y", None)
-                n = 0
-                if x is not None:
-                    n = len(x)
-                elif y is not None:
-                    n = len(y)
-                if n <= 0:
-                    # if grouped bars, each trace often represents a series — use a single shade
-                    _safe_set(tr, ["marker", "color"], theme["shades"][shade_idx % len(theme["shades"])])
-                else:
-                    # per-category shades for a single trace bar chart
-                    colors = [theme["shades"][i % len(theme["shades"])] for i in range(n)]
-                    _safe_set(tr, ["marker", "color"], colors)
-
-                _safe_set(tr, ["marker", "line"], dict(width=0.7, color=theme["border"]))
-                shade_idx += 1
-            except Exception:
-                pass
-
-        # Scatter
-        elif t == "scatter":
-            # Force accent color, even if upstream set something else
-            _safe_set(tr, ["marker", "color"], theme["accent"])
-            _safe_set(tr, ["marker", "line"], dict(width=0.7, color=theme["border"]))
-            try:
-                # If lines exist, keep them on theme too
-                _safe_set(tr, ["line", "color"], theme["accent"])
-            except Exception:
-                pass
-
-        # Histogram
-        elif t == "histogram":
-            _safe_set(tr, ["marker", "color"], theme["shades"][4] if len(theme["shades"]) > 4 else theme["accent"])
-            _safe_set(tr, ["marker", "line"], dict(width=0.7, color=theme["border"]))
-
-        # Heatmap + continuous maps
-        elif t in {"heatmap", "contour", "histogram2d", "histogram2dcontour", "densitymapbox"}:
-            try:
-                tr.colorscale = theme["continuous_scale"]
-            except Exception:
-                pass
-
-        # Box/Violin
-        elif t in {"box", "violin"}:
-            try:
-                tr.fillcolor = theme["shades"][6] if len(theme["shades"]) > 6 else theme["accent"]
-            except Exception:
-                pass
-            _safe_set(tr, ["line", "color"], theme["border"])
-
-        # Fallback
-        else:
-            try:
-                marker = getattr(tr, "marker", None)
-                if marker is not None:
-                    _safe_set(tr, ["marker", "color"], theme["accent"])
-            except Exception:
-                pass
-
-    return fig
-
-# ---------------- SIDEBAR ----------------
+# ---------------------------
+# Sidebar
+# ---------------------------
 
 with st.sidebar:
     with st.expander("Appearance", expanded=False):
@@ -454,142 +269,151 @@ with st.sidebar:
             "Plum": "#2a1033",
         }
 
-        solid_choice = None
+        solid_choice = "Slate"
         custom_solid = ""
         img_upload = None
 
-        gradient_color_a = "#0b1020"
-        gradient_color_b = "#123055"
-        gradient_angle = 135
+        grad_a = "#0b1020"
+        grad_b = "#123055"
+        grad_angle = 135
 
         if bg_mode == "Solid":
-            solid_choice = st.selectbox("Solid Palette", list(solid_palettes.keys()), index=0, key="solid_palette")
-            custom_solid = st.text_input("Optional Custom Hex", value="", placeholder="#112233", key="custom_hex")
+            solid_choice = st.selectbox("Solid Palette", list(solid_palettes.keys()), index=0)
+            custom_solid = st.text_input("Optional Custom Hex", value="", placeholder="#112233")
 
         if bg_mode == "Gradient":
-            st.caption("Build a real gradient background.")
-            gradient_color_a = st.color_picker("Gradient Color A", value="#0b1020", key="grad_a")
-            gradient_color_b = st.color_picker("Gradient Color B", value="#123055", key="grad_b")
-            gradient_angle = st.slider("Gradient Angle", 0, 360, 135, key="grad_angle")
+            st.caption("Real gradient background.")
+            grad_a = st.color_picker("Gradient Color A", value=grad_a)
+            grad_b = st.color_picker("Gradient Color B", value=grad_b)
+            grad_angle = st.slider("Gradient Angle", 0, 360, grad_angle)
 
         if bg_mode == "Image":
-            img_upload = st.file_uploader("Upload Background Image", type=["png", "jpg", "jpeg", "webp"], key="bg_image")
+            img_upload = st.file_uploader("Upload Background Image", type=["png", "jpg", "jpeg", "webp"])
 
     st.header("Inputs")
+    file_sidebar = st.file_uploader("Upload CSV or Excel", type=["csv", "xlsx", "xls"], key="data_upload_sidebar")
+    report_type = st.selectbox("Report Type", ["Overview", "Trends", "Quality Check", "Executive Summary"], index=0)
+    max_preview_rows = st.slider("Preview Rows", 5, 100, 25)
+    max_categories = st.slider("Max Categories Per Chart", 5, 50, 20)
 
-    uploaded_file_sidebar = st.file_uploader(
-        "Upload CSV or Excel",
-        type=["csv", "xlsx", "xls"],
-        key="data_upload_sidebar"
-    )
+# ---------------------------
+# Theme construction
+# ---------------------------
 
-    report_type = st.selectbox(
-        "Report Type",
-        ["Overview", "Trends", "Quality Check", "Executive Summary"],
-        index=0,
-        key="report_type"
-    )
+solid_hex = solid_palettes.get(solid_choice, "#0f172a")
+if custom_solid and custom_solid.strip().startswith("#") and len(custom_solid.strip()) in (4, 7):
+    solid_hex = custom_solid.strip()
 
-    max_preview_rows = st.slider("Preview Rows", 5, 100, 25, key="preview_rows")
-    max_categories = st.slider("Max Categories Per Chart", 5, 50, 20, key="max_categories")
+grad_css = f"linear-gradient({grad_angle}deg, {grad_a} 0%, {grad_b} 100%)"
+grad_dark = is_dark_grad(grad_a, grad_b)
 
-# ---------------- APPLY THEME + CHART ACCENT ----------------
-
-solid_hex = "#0f172a"
-if bg_mode == "Solid":
-    solid_hex = solid_palettes.get(solid_choice or "Slate", "#0f172a")
-    if custom_solid and custom_solid.strip().startswith("#") and len(custom_solid.strip()) in (4, 7):
-        solid_hex = custom_solid.strip()
-
-gradient_css = f"linear-gradient({gradient_angle}deg, {gradient_color_a} 0%, {gradient_color_b} 100%)"
-gradient_dark = is_dark_gradient(gradient_color_a, gradient_color_b)
-
-image_b64 = image_file_to_base64(img_upload)
-image_mime = img_upload.type if img_upload else "image/png"
+img_b64, img_mime = b64_image(img_upload)
 
 if bg_mode == "Solid":
-    accent_hex = solid_hex
+    dark = is_dark(solid_hex)
+    bg_css = f"background: {solid_hex} !important;"
+    accent = solid_hex
 elif bg_mode == "Gradient":
-    accent_hex = gradient_color_b
+    dark = grad_dark
+    bg_css = f"background-image: {grad_css} !important; background-attachment: fixed !important;"
+    accent = grad_b
 else:
-    accent_hex = "#3b82f6"
+    dark = True
+    if img_b64:
+        bg_css = (
+            f'background-image: url("data:{img_mime};base64,{img_b64}") !important;'
+            "background-size: cover !important;"
+            "background-position: center !important;"
+            "background-repeat: no-repeat !important;"
+            "background-attachment: fixed !important;"
+        )
+    else:
+        bg_css = "background: #0f172a !important;"
+    accent = "#3b82f6"
 
-plotly_template, theme = apply_background_and_theme_css(
-    bg_mode,
-    solid_hex,
-    gradient_css,
-    image_b64,
-    image_mime,
-    gradient_dark,
-    accent_hex
-)
+palette = {
+    "card_bg": "rgba(2, 6, 23, 0.58)" if dark else "rgba(255, 255, 255, 0.92)",
+    "border": "rgba(148, 163, 184, 0.35)" if dark else "rgba(15, 23, 42, 0.16)",
+    "widget_bg": "rgba(255,255,255,0.06)" if dark else "rgba(15,23,42,0.06)",
+    "menu_bg": "rgba(15, 23, 42, 0.96)" if dark else "rgba(255, 255, 255, 0.98)",
+    "hover_bg": "rgba(148, 163, 184, 0.22)" if dark else "rgba(15, 23, 42, 0.10)",
+    "focus_ring": "rgba(148, 163, 184, 0.40)" if dark else "rgba(15, 23, 42, 0.25)",
+}
+
+apply_css(bg_css, dark, palette)
+
+plotly_template = "plotly_dark" if dark else "plotly_white"
 pio.templates.default = plotly_template
 
-# ---------------- TITLE + TOP UPLOAD ----------------
+sh = shades(accent, 12, dark)
+theme = {
+    "plotly_template": plotly_template,
+    "paper_bg": "rgba(2, 6, 23, 0.18)" if dark else "rgba(255, 255, 255, 0.80)",
+    "plot_bg": "rgba(2, 6, 23, 0.06)" if dark else "rgba(255, 255, 255, 0.55)",
+    "text": "#e5e7eb" if dark else "#0f172a",
+    "border": palette["border"],
+    "accent": accent,
+    "shades": sh,
+    "colorscale": colorscale(sh),
+}
 
-title_left, title_right = st.columns([3, 2], vertical_alignment="center")
+# ---------------------------
+# Title and upload
+# ---------------------------
 
-with title_left:
+left, right = st.columns([3, 2], vertical_alignment="center")
+with left:
     st.markdown("# Dataset Reporting")
     st.write("Upload a CSV or Excel file to generate key statistics and visualizations.")
+with right:
+    file_top = st.file_uploader("Upload Dataset", type=["csv", "xlsx", "xls"], key="data_upload_top")
 
-with title_right:
-    uploaded_file_top = st.file_uploader(
-        "Upload Dataset",
-        type=["csv", "xlsx", "xls"],
-        key="data_upload_top",
-        help="You can upload here or in the sidebar. The most recent upload will be used."
-    )
-
-uploaded_file = uploaded_file_top if uploaded_file_top is not None else uploaded_file_sidebar
-
-if not uploaded_file:
+uploaded = file_top if file_top is not None else file_sidebar
+if not uploaded:
     st.info("Upload a dataset to begin.")
     st.stop()
 
 try:
-    df = load_file_to_df(uploaded_file)
+    df = read_df(uploaded)
 except Exception as e:
     st.error(f"Could not read the file. {e}")
     st.stop()
 
-df = basic_clean(df)
-
 numeric_cols = df.select_dtypes(include="number").columns.tolist()
 categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
 
-# ---------------- DEFAULTS FOR VISUALIZATION CONTROLS ----------------
-
-def _set_default_if_missing(key: str, value):
+# Defaults that never start as None when possible
+def ensure(key: str, value):
     if key not in st.session_state:
         st.session_state[key] = value
 
-_set_default_if_missing("scatter_x", numeric_cols[0] if len(numeric_cols) >= 1 else "None")
-_set_default_if_missing("scatter_y", numeric_cols[1] if len(numeric_cols) >= 2 else "None")
-_set_default_if_missing("cat_volume_col", categorical_cols[0] if len(categorical_cols) >= 1 else "None")
-_set_default_if_missing("cat_a", categorical_cols[0] if len(categorical_cols) >= 1 else "None")
-_set_default_if_missing("cat_b", categorical_cols[1] if len(categorical_cols) >= 2 else "None")
-_set_default_if_missing("radial_col", categorical_cols[0] if len(categorical_cols) >= 1 else "None")
-_set_default_if_missing("radial_mode", "Count")
-_set_default_if_missing("radial_value_col", numeric_cols[0] if len(numeric_cols) >= 1 else "None")
-_set_default_if_missing("radial_pick", [])
+ensure("scatter_x", numeric_cols[0] if len(numeric_cols) >= 1 else "None")
+ensure("scatter_y", numeric_cols[1] if len(numeric_cols) >= 2 else "None")
+ensure("cat_volume_col", categorical_cols[0] if len(categorical_cols) >= 1 else "None")
+ensure("cat_a", categorical_cols[0] if len(categorical_cols) >= 1 else "None")
+ensure("cat_b", categorical_cols[1] if len(categorical_cols) >= 2 else "None")
+ensure("radial_col", categorical_cols[0] if len(categorical_cols) >= 1 else "None")
+ensure("radial_mode", "Count")
+ensure("radial_value_col", numeric_cols[0] if len(numeric_cols) >= 1 else "None")
+ensure("radial_pick", [])
 
-# ---------------- KEY STATISTICS (FRONT AND CENTER) ----------------
+# ---------------------------
+# Key Statistics
+# ---------------------------
 
 st.subheader("Key Statistics")
 
 kpi_left, kpi_right = st.columns([1, 3])
-
 with kpi_left:
-    default_kpi_index = 1 if len(numeric_cols) > 0 else 0
+    default_idx = 1 if len(numeric_cols) > 0 else 0
     primary_numeric = st.selectbox(
         "Primary Numeric Column (KPIs)",
         options=["None"] + numeric_cols,
-        index=default_kpi_index,
-        key="kpi_primary_numeric"
+        index=default_idx,
+        key="kpi_primary_numeric",
     )
 
-user_choices = {
+user_choices_kpi = {
     "primary_numeric": None if primary_numeric == "None" else primary_numeric,
     "scatter_x": None,
     "scatter_y": None,
@@ -605,98 +429,86 @@ user_choices = {
 summary, visuals_kpi, numeric_df, categorical_df = build_visuals(
     df=df,
     report_type=report_type,
-    user_choices=user_choices,
-    max_categories=max_categories
+    user_choices=user_choices_kpi,
+    max_categories=max_categories,
 )
 
 with kpi_right:
-    # Add SUM metric here (Totals)
-    k1, k2, k3, k4, k5 = st.columns(5)
-
-    if summary["primary_numeric_column"]:
+    a, b, c, d, e = st.columns(5)
+    if summary.get("primary_numeric_column"):
         col = summary["primary_numeric_column"]
-        k1.metric(f"Average {col}", summary["mean"])
-        k2.metric(f"Median {col}", summary["median"])
-        k3.metric(f"Minimum {col}", summary["min"])
-        k4.metric(f"Maximum {col}", summary["max"])
-        k5.metric(f"Total {col}", summary.get("sum", "N/A"))
+        a.metric(f"Average {col}", summary.get("mean", "N/A"))
+        b.metric(f"Median {col}", summary.get("median", "N/A"))
+        c.metric(f"Minimum {col}", summary.get("min", "N/A"))
+        d.metric(f"Maximum {col}", summary.get("max", "N/A"))
+        e.metric(f"Total {col}", summary.get("sum", "N/A"))
     else:
-        k1.metric("Average", "N/A")
-        k2.metric("Median", "N/A")
-        k3.metric("Minimum", "N/A")
-        k4.metric("Maximum", "N/A")
-        k5.metric("Total", "N/A")
+        a.metric("Average", "N/A")
+        b.metric("Median", "N/A")
+        c.metric("Minimum", "N/A")
+        d.metric("Maximum", "N/A")
+        e.metric("Total", "N/A")
 
-    k6, k7, k8, k9 = st.columns(4)
-    k6.metric("Total Rows", summary["rows"])
-    k7.metric("Numeric Columns", summary["numeric_count"])
-    k8.metric("Categorical Columns", summary["categorical_count"])
-    k9.metric("Missing Cells", summary["missing_cells"])
+    r1, r2, r3, r4 = st.columns(4)
+    r1.metric("Total Rows", summary.get("rows", df.shape[0]))
+    r2.metric("Numeric Columns", summary.get("numeric_count", len(numeric_cols)))
+    r3.metric("Categorical Columns", summary.get("categorical_count", len(categorical_cols)))
+    r4.metric("Missing Cells", summary.get("missing_cells", int(df.isna().sum().sum())))
 
 st.markdown("Radial Category Breakdown")
-
 rad_controls, rad_chart = st.columns([1, 2])
 
 with rad_controls:
-    default_cat_index = 1 if len(categorical_cols) > 0 else 0
+    default_cat_idx = 1 if len(categorical_cols) > 0 else 0
     radial_col_kpi = st.selectbox(
         "Category Column",
         options=["None"] + categorical_cols,
-        index=default_cat_index,
-        key="kpi_radial_col"
+        index=default_cat_idx,
+        key="kpi_radial_col",
     )
-
     radial_mode_label = st.selectbox(
         "Value Type",
         options=["Count", "Sum of Numeric Column"],
         index=0,
-        key="kpi_radial_mode"
+        key="kpi_radial_mode",
     )
 
     radial_value_col_kpi = None
     if radial_mode_label == "Sum of Numeric Column":
-        if len(numeric_cols) == 0:
-            st.info("No numeric columns available to sum.")
-        else:
-            numeric_default_idx = 0
-            if primary_numeric != "None" and primary_numeric in numeric_cols:
-                numeric_default_idx = numeric_cols.index(primary_numeric)
-
+        if numeric_cols:
+            default_num_idx = numeric_cols.index(primary_numeric) if primary_numeric in numeric_cols else 0
             radial_value_col_kpi = st.selectbox(
                 "Numeric Column to Sum",
                 options=numeric_cols,
-                index=numeric_default_idx,
-                key="kpi_radial_value_col"
+                index=default_num_idx,
+                key="kpi_radial_value_col",
             )
+        else:
+            st.info("No numeric columns available to sum.")
 
 with rad_chart:
-    if radial_col_kpi != "None" and len(categorical_cols) > 0:
+    if radial_col_kpi != "None" and categorical_cols:
         radial_mode = "sum" if radial_mode_label == "Sum of Numeric Column" else "count"
-
-        user_choices_radial_kpi = {
-            "primary_numeric": None if primary_numeric == "None" else primary_numeric,
-            "scatter_x": None,
-            "scatter_y": None,
-            "category_volume": None,
-            "category_a": None,
-            "category_b": None,
-            "radial_category_col": radial_col_kpi,
-            "radial_categories": [],
-            "radial_mode": radial_mode,
-            "radial_value_col": radial_value_col_kpi,
-        }
-
         _, visuals_radial_kpi, _, _ = build_visuals(
             df=df,
             report_type=report_type,
-            user_choices=user_choices_radial_kpi,
-            max_categories=max_categories
+            user_choices={
+                "primary_numeric": None if primary_numeric == "None" else primary_numeric,
+                "scatter_x": None,
+                "scatter_y": None,
+                "category_volume": None,
+                "category_a": None,
+                "category_b": None,
+                "radial_category_col": radial_col_kpi,
+                "radial_categories": [],
+                "radial_mode": radial_mode,
+                "radial_value_col": radial_value_col_kpi,
+            },
+            max_categories=max_categories,
         )
-
         fig = get_fig(visuals_radial_kpi, "radial_donut")
         if fig is not None:
-            fig = apply_plotly_theme_all(fig, theme)
-            st.plotly_chart(fig, use_container_width=True, key="chart_kpi_radial_donut")
+            st.plotly_chart(force_theme(fig, theme), use_container_width=True, key="chart_kpi_radial_donut")
             st.caption("Colors use different shades of the active theme accent.")
         else:
             st.info("Select a valid category column to generate the radial chart.")
@@ -705,160 +517,145 @@ with rad_chart:
 
 with st.expander("Numeric Statistics Table"):
     st.dataframe(numeric_df, use_container_width=True)
-
 with st.expander("Categorical Statistics Table"):
     st.dataframe(categorical_df, use_container_width=True)
 
-if summary["primary_numeric_column"]:
+if summary.get("primary_numeric_column"):
     with st.expander("Distribution Chart", expanded=True):
         fig = get_fig(visuals_kpi, "numeric_distribution")
         if fig is not None:
-            fig = apply_plotly_theme_all(fig, theme)
-            st.plotly_chart(fig, use_container_width=True, key="chart_kpi_distribution")
+            st.plotly_chart(force_theme(fig, theme), use_container_width=True, key="chart_kpi_distribution")
 
 st.divider()
 
-# ---------------- DATASET (COMPACT) ----------------
+# ---------------------------
+# Dataset compact preview
+# ---------------------------
 
-row_ct = int(df.shape[0])
-col_ct = int(df.shape[1])
-st.caption(f"Dataset loaded: {row_ct:,} rows • {col_ct:,} columns")
+st.caption(f"Dataset loaded: {df.shape[0]:,} rows • {df.shape[1]:,} columns")
 
-preview_clicked = False
 try:
     @st.dialog("Dataset Preview")
-    def _preview_dialog(df_to_show: pd.DataFrame, rows: int):
+    def preview_dialog(df_to_show: pd.DataFrame, rows: int):
         st.dataframe(df_to_show.head(rows), use_container_width=True)
         st.caption(f"Showing the first {rows} rows.")
 
     c1, c2 = st.columns([1, 5], vertical_alignment="center")
     with c1:
         st.markdown('<div class="link-btn">', unsafe_allow_html=True)
-        preview_clicked = st.button("Preview", key="preview_dataset_btn")
+        open_preview = st.button("Preview", key="preview_dataset_btn")
         st.markdown("</div>", unsafe_allow_html=True)
     with c2:
         st.caption("Opens a popup with a quick preview.")
-
-    if preview_clicked:
-        _preview_dialog(df, max_preview_rows)
-
+    if open_preview:
+        preview_dialog(df, max_preview_rows)
 except Exception:
     with st.expander("Preview Dataset", expanded=False):
         st.dataframe(df.head(max_preview_rows), use_container_width=True)
-        st.caption(f"Showing the first {max_preview_rows} rows.")
 
 st.divider()
 
-# ---------------- VISUALIZATIONS ----------------
+# ---------------------------
+# Visualizations
+# ---------------------------
 
 st.subheader("Visualizations")
 
-scatter_ready = (
-    st.session_state["scatter_x"] != "None"
-    and st.session_state["scatter_y"] != "None"
-    and st.session_state["scatter_x"] != st.session_state["scatter_y"]
-)
-cat_volume_ready = st.session_state["cat_volume_col"] != "None"
-heatmap_ready = (
-    st.session_state["cat_a"] != "None"
-    and st.session_state["cat_b"] != "None"
-    and st.session_state["cat_a"] != st.session_state["cat_b"]
-)
-radial_ready = st.session_state["radial_col"] != "None"
-
-with st.expander("Numeric Comparison Scatter Plot", expanded=scatter_ready):
+with st.expander("Numeric Comparison Scatter Plot", expanded=(st.session_state["scatter_x"] != "None" and st.session_state["scatter_y"] != "None")):
     controls, chart = st.columns([1, 2])
-
     with controls:
         st.selectbox("X Axis (Numeric)", options=["None"] + numeric_cols, key="scatter_x")
         st.selectbox("Y Axis (Numeric)", options=["None"] + numeric_cols, key="scatter_y")
-
-    user_choices_scatter = {
-        "primary_numeric": None,
-        "scatter_x": None if st.session_state["scatter_x"] == "None" else st.session_state["scatter_x"],
-        "scatter_y": None if st.session_state["scatter_y"] == "None" else st.session_state["scatter_y"],
-        "category_volume": None,
-        "category_a": None,
-        "category_b": None,
-        "radial_category_col": None,
-        "radial_categories": [],
-        "radial_mode": "count",
-        "radial_value_col": None,
-    }
-
-    _, visuals_scatter, _, _ = build_visuals(df, report_type, user_choices_scatter, max_categories)
-
+    _, visuals, _, _ = build_visuals(
+        df,
+        report_type,
+        {
+            "primary_numeric": None,
+            "scatter_x": None if st.session_state["scatter_x"] == "None" else st.session_state["scatter_x"],
+            "scatter_y": None if st.session_state["scatter_y"] == "None" else st.session_state["scatter_y"],
+            "category_volume": None,
+            "category_a": None,
+            "category_b": None,
+            "radial_category_col": None,
+            "radial_categories": [],
+            "radial_mode": "count",
+            "radial_value_col": None,
+        },
+        max_categories,
+    )
     with chart:
-        fig = get_fig(visuals_scatter, "numeric_scatter")
+        fig = get_fig(visuals, "numeric_scatter")
         if fig is not None:
-            fig = apply_plotly_theme_all(fig, theme)
-            st.plotly_chart(fig, use_container_width=True, key="chart_scatter")
+            st.plotly_chart(force_theme(fig, theme), use_container_width=True, key="chart_scatter")
+        else:
+            st.info("Select two different numeric columns to generate the scatter plot.")
 
-with st.expander("Category Distribution Bar Chart", expanded=cat_volume_ready):
+with st.expander("Category Distribution Bar Chart", expanded=(st.session_state["cat_volume_col"] != "None")):
     controls, chart = st.columns([1, 2])
-
     with controls:
         st.selectbox("Category Column", options=["None"] + categorical_cols, key="cat_volume_col")
-
-    user_choices_cat_vol = {
-        "primary_numeric": None,
-        "scatter_x": None,
-        "scatter_y": None,
-        "category_volume": None if st.session_state["cat_volume_col"] == "None" else st.session_state["cat_volume_col"],
-        "category_a": None,
-        "category_b": None,
-        "radial_category_col": None,
-        "radial_categories": [],
-        "radial_mode": "count",
-        "radial_value_col": None,
-    }
-
-    _, visuals_cat_vol, _, _ = build_visuals(df, report_type, user_choices_cat_vol, max_categories)
-
+    _, visuals, _, _ = build_visuals(
+        df,
+        report_type,
+        {
+            "primary_numeric": None,
+            "scatter_x": None,
+            "scatter_y": None,
+            "category_volume": None if st.session_state["cat_volume_col"] == "None" else st.session_state["cat_volume_col"],
+            "category_a": None,
+            "category_b": None,
+            "radial_category_col": None,
+            "radial_categories": [],
+            "radial_mode": "count",
+            "radial_value_col": None,
+        },
+        max_categories,
+    )
     with chart:
-        fig = get_fig(visuals_cat_vol, "category_volume")
+        fig = get_fig(visuals, "category_volume")
         if fig is not None:
-            fig = apply_plotly_theme_all(fig, theme)
-            st.plotly_chart(fig, use_container_width=True, key="chart_category_volume")
+            st.plotly_chart(force_theme(fig, theme), use_container_width=True, key="chart_category_volume")
+        else:
+            st.info("Select a categorical column to generate the bar chart.")
 
-with st.expander("Category Relationship Heatmap", expanded=heatmap_ready):
+with st.expander("Category Relationship Heatmap", expanded=(st.session_state["cat_a"] != "None" and st.session_state["cat_b"] != "None" and st.session_state["cat_a"] != st.session_state["cat_b"])):
     controls, chart = st.columns([1, 2])
-
     with controls:
         st.selectbox("Category A", options=["None"] + categorical_cols, key="cat_a")
         st.selectbox("Category B", options=["None"] + categorical_cols, key="cat_b")
-
-    user_choices_heatmap = {
-        "primary_numeric": None,
-        "scatter_x": None,
-        "scatter_y": None,
-        "category_volume": None,
-        "category_a": None if st.session_state["cat_a"] == "None" else st.session_state["cat_a"],
-        "category_b": None if st.session_state["cat_b"] == "None" else st.session_state["cat_b"],
-        "radial_category_col": None,
-        "radial_categories": [],
-        "radial_mode": "count",
-        "radial_value_col": None,
-    }
-
-    _, visuals_heatmap, _, _ = build_visuals(df, report_type, user_choices_heatmap, max_categories)
-
+    _, visuals, _, _ = build_visuals(
+        df,
+        report_type,
+        {
+            "primary_numeric": None,
+            "scatter_x": None,
+            "scatter_y": None,
+            "category_volume": None,
+            "category_a": None if st.session_state["cat_a"] == "None" else st.session_state["cat_a"],
+            "category_b": None if st.session_state["cat_b"] == "None" else st.session_state["cat_b"],
+            "radial_category_col": None,
+            "radial_categories": [],
+            "radial_mode": "count",
+            "radial_value_col": None,
+        },
+        max_categories,
+    )
     with chart:
-        fig = get_fig(visuals_heatmap, "category_heatmap")
+        fig = get_fig(visuals, "category_heatmap")
         if fig is not None:
-            fig = apply_plotly_theme_all(fig, theme)
-            st.plotly_chart(fig, use_container_width=True, key="chart_heatmap")
+            st.plotly_chart(force_theme(fig, theme), use_container_width=True, key="chart_heatmap")
+        else:
+            st.info("Select two different categorical columns to generate the heatmap.")
 
-with st.expander("Radial Category Donut Chart", expanded=radial_ready):
+with st.expander("Radial Category Donut Chart", expanded=(st.session_state["radial_col"] != "None")):
     controls, chart = st.columns([1, 2])
-
     with controls:
         st.selectbox("Category Column", options=["None"] + categorical_cols, key="radial_col")
 
         selected_col = st.session_state["radial_col"]
-        category_options = []
+        opts = []
         if selected_col != "None":
-            category_options = (
+            opts = (
                 df[selected_col]
                 .astype("string")
                 .fillna("Missing")
@@ -868,62 +665,51 @@ with st.expander("Radial Category Donut Chart", expanded=radial_ready):
                 .tolist()
             )
 
-        st.multiselect(
-            "Include Categories (Optional)",
-            options=category_options,
-            default=st.session_state["radial_pick"] if st.session_state["radial_pick"] else [],
-            key="radial_pick"
-        )
-
-        st.selectbox(
-            "Value Type",
-            options=["Count", "Sum of Numeric Column"],
-            key="radial_mode"
-        )
+        st.multiselect("Include Categories (Optional)", options=opts, default=st.session_state["radial_pick"], key="radial_pick")
+        st.selectbox("Value Type", ["Count", "Sum of Numeric Column"], key="radial_mode")
 
         if st.session_state["radial_mode"] == "Sum of Numeric Column":
-            st.selectbox(
-                "Numeric Column to Sum",
-                options=["None"] + numeric_cols,
-                key="radial_value_col"
-            )
+            st.selectbox("Numeric Column to Sum", options=["None"] + numeric_cols, key="radial_value_col")
         else:
             st.session_state["radial_value_col"] = "None"
 
     radial_mode = "sum" if st.session_state["radial_mode"] == "Sum of Numeric Column" else "count"
     radial_value_col = None if st.session_state["radial_value_col"] == "None" else st.session_state["radial_value_col"]
 
-    user_choices_radial = {
-        "primary_numeric": None,
-        "scatter_x": None,
-        "scatter_y": None,
-        "category_volume": None,
-        "category_a": None,
-        "category_b": None,
-        "radial_category_col": None if st.session_state["radial_col"] == "None" else st.session_state["radial_col"],
-        "radial_categories": st.session_state["radial_pick"],
-        "radial_mode": radial_mode,
-        "radial_value_col": radial_value_col,
-    }
-
-    _, visuals_radial, _, _ = build_visuals(df, report_type, user_choices_radial, max_categories)
+    _, visuals, _, _ = build_visuals(
+        df,
+        report_type,
+        {
+            "primary_numeric": None,
+            "scatter_x": None,
+            "scatter_y": None,
+            "category_volume": None,
+            "category_a": None,
+            "category_b": None,
+            "radial_category_col": None if st.session_state["radial_col"] == "None" else st.session_state["radial_col"],
+            "radial_categories": st.session_state["radial_pick"],
+            "radial_mode": radial_mode,
+            "radial_value_col": radial_value_col,
+        },
+        max_categories,
+    )
 
     with chart:
-        fig = get_fig(visuals_radial, "radial_donut")
+        fig = get_fig(visuals, "radial_donut")
         if fig is not None:
-            fig = apply_plotly_theme_all(fig, theme)
-            st.plotly_chart(fig, use_container_width=True, key="chart_radial_donut")
+            st.plotly_chart(force_theme(fig, theme), use_container_width=True, key="chart_radial_donut")
 
 st.divider()
 
-# ---------------- EXPORT ----------------
+# ---------------------------
+# Export
+# ---------------------------
 
 st.subheader("Export")
 st.write("Download your cleaned dataset for use in other visualization tools.")
-
 st.download_button(
-    label="Download CSV",
+    "Download CSV",
     data=df.to_csv(index=False),
     file_name="report_data.csv",
-    mime="text/csv"
+    mime="text/csv",
 )
