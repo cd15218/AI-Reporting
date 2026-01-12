@@ -68,7 +68,7 @@ st.dataframe(df.head(max_preview_rows), use_container_width=True)
 
 st.divider()
 
-# ---------------- KEY STATISTICS ----------------
+# ---------------- KEY STATISTICS (always visible) ----------------
 st.subheader("Key statistics")
 
 left, right = st.columns([1, 2])
@@ -89,7 +89,7 @@ user_choices = {
     "category_b": None,
 }
 
-summary, visuals, numeric_df, categorical_df = build_visuals(
+summary, visuals_kpi, numeric_df, categorical_df = build_visuals(
     df=df,
     report_type=report_type,
     user_choices=user_choices,
@@ -123,133 +123,150 @@ with st.expander("Numeric statistics table"):
 with st.expander("Categorical statistics table"):
     st.dataframe(categorical_df, use_container_width=True)
 
-# Optional numeric distribution chart tied to KPIs
+# KPI linked numeric distribution
 if summary["primary_numeric_column"]:
-    st.subheader("Numeric distribution")
-    fig = get_fig(visuals, "numeric_distribution")
-    if fig is not None:
-        st.plotly_chart(fig, use_container_width=True)
+    with st.expander("Numeric distribution chart", expanded=True):
+        fig = get_fig(visuals_kpi, "numeric_distribution")
+        if fig is not None:
+            st.plotly_chart(fig, use_container_width=True)
 
 st.divider()
 
-# ---------------- NUMERIC COMPARISON SCATTER ----------------
-st.subheader("Numeric comparison chart")
+# ---------------- ACCORDION STYLE CHART SECTIONS ----------------
+st.subheader("Visualizations")
 
-controls, chart = st.columns([1, 2])
+# Keep selection state so accordion behavior feels consistent
+if "scatter_x" not in st.session_state:
+    st.session_state["scatter_x"] = "None"
+if "scatter_y" not in st.session_state:
+    st.session_state["scatter_y"] = "None"
+if "cat_volume_col" not in st.session_state:
+    st.session_state["cat_volume_col"] = "None"
+if "cat_a" not in st.session_state:
+    st.session_state["cat_a"] = "None"
+if "cat_b" not in st.session_state:
+    st.session_state["cat_b"] = "None"
 
-with controls:
-    scatter_x = st.selectbox(
-        "X axis (numeric)",
-        options=["None"] + numeric_cols,
-        key="scatter_x"
-    )
-    scatter_y = st.selectbox(
-        "Y axis (numeric)",
-        options=["None"] + numeric_cols,
-        key="scatter_y"
-    )
-
-user_choices = {
-    "primary_numeric": None,
-    "scatter_x": None if scatter_x == "None" else scatter_x,
-    "scatter_y": None if scatter_y == "None" else scatter_y,
-    "category_volume": None,
-    "category_a": None,
-    "category_b": None,
-}
-
-_, visuals_scatter, _, _ = build_visuals(
-    df=df,
-    report_type=report_type,
-    user_choices=user_choices,
-    max_categories=max_categories
+scatter_ready = (
+    st.session_state["scatter_x"] != "None"
+    and st.session_state["scatter_y"] != "None"
+    and st.session_state["scatter_x"] != st.session_state["scatter_y"]
+)
+cat_volume_ready = st.session_state["cat_volume_col"] != "None"
+heatmap_ready = (
+    st.session_state["cat_a"] != "None"
+    and st.session_state["cat_b"] != "None"
+    and st.session_state["cat_a"] != st.session_state["cat_b"]
 )
 
-with chart:
-    fig = get_fig(visuals_scatter, "numeric_scatter")
-    if fig is not None:
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Select two different numeric columns to generate the scatter chart.")
+with st.expander("Numeric comparison scatter", expanded=scatter_ready):
+    controls, chart = st.columns([1, 2])
 
-st.divider()
+    with controls:
+        st.selectbox(
+            "X axis (numeric)",
+            options=["None"] + numeric_cols,
+            key="scatter_x"
+        )
+        st.selectbox(
+            "Y axis (numeric)",
+            options=["None"] + numeric_cols,
+            key="scatter_y"
+        )
 
-# ---------------- CATEGORICAL VOLUME ----------------
-st.subheader("Categorical volume chart")
+    user_choices = {
+        "primary_numeric": None,
+        "scatter_x": None if st.session_state["scatter_x"] == "None" else st.session_state["scatter_x"],
+        "scatter_y": None if st.session_state["scatter_y"] == "None" else st.session_state["scatter_y"],
+        "category_volume": None,
+        "category_a": None,
+        "category_b": None,
+    }
 
-controls, chart = st.columns([1, 2])
-
-with controls:
-    category_volume_col = st.selectbox(
-        "Category column",
-        options=["None"] + categorical_cols,
-        key="cat_volume_col"
+    _, visuals_scatter, _, _ = build_visuals(
+        df=df,
+        report_type=report_type,
+        user_choices=user_choices,
+        max_categories=max_categories
     )
 
-user_choices = {
-    "primary_numeric": None,
-    "scatter_x": None,
-    "scatter_y": None,
-    "category_volume": None if category_volume_col == "None" else category_volume_col,
-    "category_a": None,
-    "category_b": None,
-}
+    with chart:
+        fig = get_fig(visuals_scatter, "numeric_scatter")
+        if fig is not None:
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Select two different numeric columns to generate the scatter chart.")
 
-_, visuals_cat_vol, _, _ = build_visuals(
-    df=df,
-    report_type=report_type,
-    user_choices=user_choices,
-    max_categories=max_categories
-)
+with st.expander("Categorical volume chart", expanded=cat_volume_ready):
+    controls, chart = st.columns([1, 2])
 
-with chart:
-    fig = get_fig(visuals_cat_vol, "category_volume")
-    if fig is not None:
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Select a categorical column to generate a category volume chart.")
+    with controls:
+        st.selectbox(
+            "Category column",
+            options=["None"] + categorical_cols,
+            key="cat_volume_col"
+        )
 
-st.divider()
+    user_choices = {
+        "primary_numeric": None,
+        "scatter_x": None,
+        "scatter_y": None,
+        "category_volume": None if st.session_state["cat_volume_col"] == "None" else st.session_state["cat_volume_col"],
+        "category_a": None,
+        "category_b": None,
+    }
 
-# ---------------- CATEGORICAL COMPARISON HEATMAP ----------------
-st.subheader("Categorical comparison chart")
-
-controls, chart = st.columns([1, 2])
-
-with controls:
-    category_a = st.selectbox(
-        "Category A",
-        options=["None"] + categorical_cols,
-        key="cat_a"
-    )
-    category_b = st.selectbox(
-        "Category B",
-        options=["None"] + categorical_cols,
-        key="cat_b"
+    _, visuals_cat_vol, _, _ = build_visuals(
+        df=df,
+        report_type=report_type,
+        user_choices=user_choices,
+        max_categories=max_categories
     )
 
-user_choices = {
-    "primary_numeric": None,
-    "scatter_x": None,
-    "scatter_y": None,
-    "category_volume": None,
-    "category_a": None if category_a == "None" else category_a,
-    "category_b": None if category_b == "None" else category_b,
-}
+    with chart:
+        fig = get_fig(visuals_cat_vol, "category_volume")
+        if fig is not None:
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Select a categorical column to generate a category volume chart.")
 
-_, visuals_heatmap, _, _ = build_visuals(
-    df=df,
-    report_type=report_type,
-    user_choices=user_choices,
-    max_categories=max_categories
-)
+with st.expander("Categorical comparison heatmap", expanded=heatmap_ready):
+    controls, chart = st.columns([1, 2])
 
-with chart:
-    fig = get_fig(visuals_heatmap, "category_heatmap")
-    if fig is not None:
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Select two different categorical columns to generate a comparison heatmap.")
+    with controls:
+        st.selectbox(
+            "Category A",
+            options=["None"] + categorical_cols,
+            key="cat_a"
+        )
+        st.selectbox(
+            "Category B",
+            options=["None"] + categorical_cols,
+            key="cat_b"
+        )
+
+    user_choices = {
+        "primary_numeric": None,
+        "scatter_x": None,
+        "scatter_y": None,
+        "category_volume": None,
+        "category_a": None if st.session_state["cat_a"] == "None" else st.session_state["cat_a"],
+        "category_b": None if st.session_state["cat_b"] == "None" else st.session_state["cat_b"],
+    }
+
+    _, visuals_heatmap, _, _ = build_visuals(
+        df=df,
+        report_type=report_type,
+        user_choices=user_choices,
+        max_categories=max_categories
+    )
+
+    with chart:
+        fig = get_fig(visuals_heatmap, "category_heatmap")
+        if fig is not None:
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Select two different categorical columns to generate a comparison heatmap.")
 
 st.divider()
 
