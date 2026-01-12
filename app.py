@@ -46,11 +46,9 @@ def _hex_to_rgb(hex_color: str):
     return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
 
 def _relative_luminance(rgb):
-    # WCAG relative luminance
     def channel(c):
         c = c / 255.0
         return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
-
     r, g, b = rgb
     return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
 
@@ -65,100 +63,105 @@ def apply_background_and_theme_css(
     solid_hex: str,
     gradient_css: str,
     image_b64: str,
-    image_mime: str
+    image_mime: str,
+    gradient_name: str | None
 ):
-    # Decide theme
+    # ---------------- THEME DECISION ----------------
     if mode == "Solid":
         dark = is_dark_hex(solid_hex)
+
     elif mode == "Gradient":
-        dark = "ffffff" not in (gradient_css or "").lower()
+        # Explicit mapping for gradients (no guessing)
+        LIGHT_GRADIENTS = {"Light Studio"}
+        dark = gradient_name not in LIGHT_GRADIENTS
+
     else:
         # Image backgrounds are unpredictable
         dark = True
 
+    # ---------------- COLOR TOKENS ----------------
+    # Text colors
     text = "#e5e7eb" if dark else "#0f172a"
     muted = "#cbd5e1" if dark else "#334155"
-    card_bg = "rgba(2, 6, 23, 0.55)" if dark else "rgba(255, 255, 255, 0.85)"
-    border = "rgba(148, 163, 184, 0.35)" if dark else "rgba(15, 23, 42, 0.15)"
+
+    # Panel colors (this is the “box” behind your content)
+    # Make sure Light Studio never ends up with a dark panel.
+    card_bg = "rgba(2, 6, 23, 0.58)" if dark else "rgba(255, 255, 255, 0.92)"
+    border = "rgba(148, 163, 184, 0.35)" if dark else "rgba(15, 23, 42, 0.16)"
+
+    # Widget surfaces
     widget_bg = "rgba(255,255,255,0.06)" if dark else "rgba(15,23,42,0.06)"
 
-    # Background CSS (avoid invalid image CSS if no image uploaded)
+    # Plotly “card” backgrounds (match the panel, so text never blends into a dark chart box)
+    plot_paper_bg = "rgba(2, 6, 23, 0.18)" if dark else "rgba(255, 255, 255, 0.80)"
+    plot_plot_bg = "rgba(2, 6, 23, 0.06)" if dark else "rgba(255, 255, 255, 0.55)"
+
+    # ---------------- BACKGROUND CSS ----------------
     if mode == "Solid":
         bg_css = f"background: {solid_hex} !important;"
     elif mode == "Gradient":
         bg_css = f"background: {gradient_css} !important;"
     else:
-        if image_b64:
-            bg_css = f"""
+        bg_css = (
+            f"""
             background-image: url("data:{image_mime};base64,{image_b64}") !important;
             background-size: cover !important;
             background-position: center !important;
             background-repeat: no-repeat !important;
             """
-        else:
-            bg_css = "background: #0f172a !important;"
+            if image_b64
+            else "background: #0f172a !important;"
+        )
 
-    # IMPORTANT: do NOT hide the entire header/toolbar.
-    # Hide only the “extra” cloud widgets that look like a GitHub/deploy bar.
     st.markdown(
         f"""
         <style>
-        /* Keep header so sidebar toggle always works */
+        /* Keep header so sidebar toggle works */
         header[data-testid="stHeader"] {{
             background: transparent !important;
         }}
 
-        /* Hide common Streamlit Cloud widgets (but leave sidebar toggle alone) */
-        [data-testid="stDeployButton"] {{
-            display: none !important;
-        }}
-        [data-testid="stStatusWidget"] {{
-            display: none !important;
-        }}
+        /* Hide deploy / repo controls only */
+        [data-testid="stDeployButton"],
+        [data-testid="stStatusWidget"],
         [data-testid="stToolbarActions"] {{
-            display: none !important;
-        }}
-        /* Some builds use these */
-        [data-testid="stToolbar"] a,
-        [data-testid="stToolbar"] button[title*="Deploy"],
-        [data-testid="stToolbar"] button[title*="GitHub"],
-        [data-testid="stToolbar"] button[title*="Source"],
-        [data-testid="stToolbar"] button[title*="Settings"] {{
             display: none !important;
         }}
 
         html, body, [data-testid="stAppViewContainer"] {{
             {bg_css}
         }}
+
         [data-testid="stAppViewContainer"] > .main {{
             {bg_css}
             padding-top: 0rem;
         }}
 
-        /* Main content panel (readability) */
+        /* Content panel */
         .block-container {{
             background: {card_bg};
             border: 1px solid {border};
             border-radius: 18px;
-            padding: 1.2rem 1.2rem;
+            padding: 1.2rem;
             backdrop-filter: blur(8px);
         }}
 
-        /* Global text colors */
+        /* Global text */
         html, body, [data-testid="stAppViewContainer"] * {{
             color: {text};
         }}
+
         .stCaption, .stMarkdown p, .stMarkdown li {{
             color: {muted};
         }}
 
-        /* Sidebar */
+        /* Sidebar panel */
         section[data-testid="stSidebar"] > div {{
             background: {card_bg};
             border-right: 1px solid {border};
         }}
 
-        /* Inputs */
+        /* Select widgets */
         div[data-baseweb="select"] > div {{
             background: {widget_bg} !important;
             border: 1px solid {border} !important;
@@ -170,14 +173,11 @@ def apply_background_and_theme_css(
             border: 1px solid {border} !important;
         }}
 
-        /* Uploader area */
+        /* Uploader dropzone */
         [data-testid="stFileUploaderDropzone"] {{
-            background: {widget_bg} !important;
-            border: 1px dashed {border} !important;
-            border-radius: 12px !important;
-        }}
-        [data-testid="stFileUploaderDropzone"] * {{
-            color: {text} !important;
+            background: {widget_bg};
+            border: 1px dashed {border};
+            border-radius: 12px;
         }}
 
         /* Expanders */
@@ -185,7 +185,6 @@ def apply_background_and_theme_css(
             background: {widget_bg};
             border: 1px solid {border};
             border-radius: 12px;
-            padding: 0.35rem 0.6rem;
         }}
 
         /* Metric cards */
@@ -202,19 +201,71 @@ def apply_background_and_theme_css(
             border-radius: 12px;
             overflow: hidden;
         }}
+
+        /* Code blocks (these can look like “black boxes” on light themes) */
+        pre, code {{
+            background: {widget_bg} !important;
+            border: 1px solid {border} !important;
+            border-radius: 10px !important;
+        }}
         </style>
         """,
         unsafe_allow_html=True
     )
 
-    return "plotly_dark" if dark else "plotly_white"
+    plotly_template = "plotly_dark" if dark else "plotly_white"
+
+    theme = {
+        "dark": dark,
+        "text": text,
+        "muted": muted,
+        "border": border,
+        "card_bg": card_bg,
+        "widget_bg": widget_bg,
+        "plot_paper_bg": plot_paper_bg,
+        "plot_plot_bg": plot_plot_bg,
+        "plotly_template": plotly_template,
+    }
+
+    return plotly_template, theme
+
+def apply_plotly_theme(fig, theme: dict):
+    """
+    Ensure chart title, legend, axes, and backgrounds never blend with the panel.
+    This prevents cases like Light Studio having dark text on a dark chart box.
+    """
+    fig.update_layout(
+        template=theme["plotly_template"],
+        paper_bgcolor=theme["plot_paper_bg"],
+        plot_bgcolor=theme["plot_plot_bg"],
+        font=dict(color=theme["text"]),
+        title=dict(font=dict(color=theme["text"])),
+        legend=dict(font=dict(color=theme["text"]), title=dict(font=dict(color=theme["text"]))),
+        margin=dict(t=72, l=40, r=40, b=40),
+    )
+
+    # Axis label/tick colors (for non-pie charts)
+    if hasattr(fig.layout, "xaxis"):
+        fig.update_xaxes(
+            title_font=dict(color=theme["text"]),
+            tickfont=dict(color=theme["text"]),
+            gridcolor=theme["border"]
+        )
+    if hasattr(fig.layout, "yaxis"):
+        fig.update_yaxes(
+            title_font=dict(color=theme["text"]),
+            tickfont=dict(color=theme["text"]),
+            gridcolor=theme["border"]
+        )
+
+    return fig
 
 # ---------------- SIDEBAR ----------------
 
 with st.sidebar:
     st.header("Appearance")
 
-    bg_mode = st.selectbox("Background type", ["Solid", "Gradient", "Image"], index=1)
+    bg_mode = st.selectbox("Background Type", ["Solid", "Gradient", "Image"], index=1)
 
     solid_palettes = {
         "Slate": "#0f172a",
@@ -240,15 +291,14 @@ with st.sidebar:
     img_upload = None
 
     if bg_mode == "Solid":
-        solid_choice = st.selectbox("Solid palette", list(solid_palettes.keys()), index=0, key="solid_palette")
-        custom_solid = st.text_input("Optional custom hex", value="", placeholder="#112233", key="custom_hex")
+        solid_choice = st.selectbox("Solid Palette", list(solid_palettes.keys()), index=0, key="solid_palette")
+        custom_solid = st.text_input("Optional Custom Hex", value="", placeholder="#112233", key="custom_hex")
 
     if bg_mode == "Gradient":
-        gradient_choice = st.selectbox("Gradient preset", list(gradient_presets.keys()), index=0, key="gradient_preset")
+        gradient_choice = st.selectbox("Gradient Preset", list(gradient_presets.keys()), index=0, key="gradient_preset")
 
     if bg_mode == "Image":
-        img_upload = st.file_uploader("Upload background image", type=["png", "jpg", "jpeg", "webp"], key="bg_image")
-        st.caption("Tip: large images look best. The content panel stays readable.")
+        img_upload = st.file_uploader("Upload Background Image", type=["png", "jpg", "jpeg", "webp"], key="bg_image")
 
     st.divider()
     st.header("Inputs")
@@ -260,16 +310,17 @@ with st.sidebar:
     )
 
     report_type = st.selectbox(
-        "Report type",
+        "Report Type",
         ["Overview", "Trends", "Quality Check", "Executive Summary"],
         index=0,
         key="report_type"
     )
 
-    max_preview_rows = st.slider("Preview rows", 5, 100, 25, key="preview_rows")
-    max_categories = st.slider("Max categories per chart", 5, 50, 20, key="max_categories")
+    max_preview_rows = st.slider("Preview Rows", 5, 100, 25, key="preview_rows")
+    max_categories = st.slider("Max Categories Per Chart", 5, 50, 20, key="max_categories")
 
-# Resolve theme inputs
+# ---------------- APPLY THEME ----------------
+
 solid_hex = "#0f172a"
 if bg_mode == "Solid":
     solid_hex = solid_palettes.get(solid_choice or "Slate", "#0f172a")
@@ -281,12 +332,13 @@ gradient_css = gradient_presets.get(gradient_choice or "Midnight Blue", gradient
 image_b64 = image_file_to_base64(img_upload)
 image_mime = img_upload.type if img_upload else "image/png"
 
-plotly_template = apply_background_and_theme_css(
+plotly_template, theme = apply_background_and_theme_css(
     bg_mode,
     solid_hex,
     gradient_css,
     image_b64,
-    image_mime
+    image_mime,
+    gradient_choice
 )
 pio.templates.default = plotly_template
 
@@ -310,20 +362,20 @@ df = basic_clean(df)
 numeric_cols = df.select_dtypes(include="number").columns.tolist()
 categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
 
-st.subheader("Data preview")
+st.subheader("Data Preview")
 st.dataframe(df.head(max_preview_rows), use_container_width=True)
 
 st.divider()
 
 # ---------------- KEY STATISTICS ----------------
 
-st.subheader("Key statistics")
+st.subheader("Key Statistics")
 
 left, right = st.columns([1, 2])
 
 with left:
     primary_numeric = st.selectbox(
-        "Primary numeric column (KPIs)",
+        "Primary Numeric Column (KPIs)",
         options=["None"] + numeric_cols,
         key="kpi_primary_numeric"
     )
@@ -364,27 +416,27 @@ with right:
         k4.metric("Maximum", "N/A")
 
     k5, k6, k7, k8 = st.columns(4)
-    k5.metric("Total rows", summary["rows"])
-    k6.metric("Numeric columns", summary["numeric_count"])
-    k7.metric("Categorical columns", summary["categorical_count"])
-    k8.metric("Missing cells", summary["missing_cells"])
+    k5.metric("Total Rows", summary["rows"])
+    k6.metric("Numeric Columns", summary["numeric_count"])
+    k7.metric("Categorical Columns", summary["categorical_count"])
+    k8.metric("Missing Cells", summary["missing_cells"])
 
-with st.expander("Numeric statistics table"):
+with st.expander("Numeric Statistics Table"):
     st.dataframe(numeric_df, use_container_width=True)
 
-with st.expander("Categorical statistics table"):
+with st.expander("Categorical Statistics Table"):
     st.dataframe(categorical_df, use_container_width=True)
 
 if summary["primary_numeric_column"]:
-    with st.expander("Numeric distribution chart", expanded=True):
+    with st.expander("Distribution Chart", expanded=True):
         fig = get_fig(visuals_kpi, "numeric_distribution")
         if fig is not None:
-            fig.update_layout(template=plotly_template)
+            fig = apply_plotly_theme(fig, theme)
             st.plotly_chart(fig, use_container_width=True)
 
 st.divider()
 
-# ---------------- ACCORDION CHARTS ----------------
+# ---------------- VISUALIZATIONS ----------------
 
 st.subheader("Visualizations")
 
@@ -419,12 +471,12 @@ heatmap_ready = (
 )
 radial_ready = st.session_state["radial_col"] != "None"
 
-with st.expander("Numeric comparison scatter", expanded=scatter_ready):
+with st.expander("Numeric Comparison Scatter Plot", expanded=scatter_ready):
     controls, chart = st.columns([1, 2])
 
     with controls:
-        st.selectbox("X axis (numeric)", options=["None"] + numeric_cols, key="scatter_x")
-        st.selectbox("Y axis (numeric)", options=["None"] + numeric_cols, key="scatter_y")
+        st.selectbox("X Axis (Numeric)", options=["None"] + numeric_cols, key="scatter_x")
+        st.selectbox("Y Axis (Numeric)", options=["None"] + numeric_cols, key="scatter_y")
 
     user_choices = {
         "primary_numeric": None,
@@ -444,16 +496,16 @@ with st.expander("Numeric comparison scatter", expanded=scatter_ready):
     with chart:
         fig = get_fig(visuals_scatter, "numeric_scatter")
         if fig is not None:
-            fig.update_layout(template=plotly_template)
+            fig = apply_plotly_theme(fig, theme)
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("Select two different numeric columns to generate the scatter chart.")
+            st.info("Select two different numeric columns to generate the scatter plot.")
 
-with st.expander("Categorical volume chart", expanded=cat_volume_ready):
+with st.expander("Category Distribution Bar Chart", expanded=cat_volume_ready):
     controls, chart = st.columns([1, 2])
 
     with controls:
-        st.selectbox("Category column", options=["None"] + categorical_cols, key="cat_volume_col")
+        st.selectbox("Category Column", options=["None"] + categorical_cols, key="cat_volume_col")
 
     user_choices = {
         "primary_numeric": None,
@@ -473,12 +525,12 @@ with st.expander("Categorical volume chart", expanded=cat_volume_ready):
     with chart:
         fig = get_fig(visuals_cat_vol, "category_volume")
         if fig is not None:
-            fig.update_layout(template=plotly_template)
+            fig = apply_plotly_theme(fig, theme)
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("Select a categorical column to generate a category volume chart.")
+            st.info("Select a categorical column to generate the bar chart.")
 
-with st.expander("Categorical comparison heatmap", expanded=heatmap_ready):
+with st.expander("Category Relationship Heatmap", expanded=heatmap_ready):
     controls, chart = st.columns([1, 2])
 
     with controls:
@@ -503,16 +555,16 @@ with st.expander("Categorical comparison heatmap", expanded=heatmap_ready):
     with chart:
         fig = get_fig(visuals_heatmap, "category_heatmap")
         if fig is not None:
-            fig.update_layout(template=plotly_template)
+            fig = apply_plotly_theme(fig, theme)
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("Select two different categorical columns to generate a comparison heatmap.")
+            st.info("Select two different categorical columns to generate the heatmap.")
 
-with st.expander("Radial category chart (donut)", expanded=radial_ready):
+with st.expander("Radial Category Donut Chart", expanded=radial_ready):
     controls, chart = st.columns([1, 2])
 
     with controls:
-        st.selectbox("Category column", options=["None"] + categorical_cols, key="radial_col")
+        st.selectbox("Category Column", options=["None"] + categorical_cols, key="radial_col")
 
         selected_col = st.session_state["radial_col"]
         category_options = []
@@ -528,28 +580,28 @@ with st.expander("Radial category chart (donut)", expanded=radial_ready):
             )
 
         st.multiselect(
-            "Include categories (optional)",
+            "Include Categories (Optional)",
             options=category_options,
             default=st.session_state["radial_pick"] if st.session_state["radial_pick"] else [],
             key="radial_pick"
         )
 
         st.selectbox(
-            "Value type",
-            options=["Count", "Sum of numeric column"],
+            "Value Type",
+            options=["Count", "Sum of Numeric Column"],
             key="radial_mode"
         )
 
-        if st.session_state["radial_mode"] == "Sum of numeric column":
+        if st.session_state["radial_mode"] == "Sum of Numeric Column":
             st.selectbox(
-                "Numeric column to sum",
+                "Numeric Column to Sum",
                 options=["None"] + numeric_cols,
                 key="radial_value_col"
             )
         else:
             st.session_state["radial_value_col"] = "None"
 
-    radial_mode = "sum" if st.session_state["radial_mode"] == "Sum of numeric column" else "count"
+    radial_mode = "sum" if st.session_state["radial_mode"] == "Sum of Numeric Column" else "count"
     radial_value_col = None if st.session_state["radial_value_col"] == "None" else st.session_state["radial_value_col"]
 
     user_choices = {
@@ -570,11 +622,11 @@ with st.expander("Radial category chart (donut)", expanded=radial_ready):
     with chart:
         fig = get_fig(visuals_radial, "radial_donut")
         if fig is not None:
-            fig.update_layout(template=plotly_template)
+            fig = apply_plotly_theme(fig, theme)
             st.plotly_chart(fig, use_container_width=True)
-            st.caption("Colors are different shades of one base color for a cohesive look.")
+            st.caption("Colors use different shades of one base color for a cohesive look.")
         else:
-            st.info("Select a categorical column to generate the radial chart.")
+            st.info("Select a categorical column to generate the donut chart.")
 
 st.divider()
 
