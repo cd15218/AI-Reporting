@@ -109,18 +109,12 @@ def safe_len(x) -> int:
             return 0
 
 def enforce_y_axis_horizontal(fig):
-    """
-    Forces all y-axis tick labels to be horizontal (tickangle=0) without touching x-axis.
-    Applies to yaxis, yaxis2, yaxis3... and enables automargin.
-    """
     if fig is None:
         return fig
-
     try:
         fig.update_yaxes(tickangle=0, automargin=True)
     except Exception:
         pass
-
     try:
         layout_updates = {}
         if hasattr(fig, "layout") and fig.layout:
@@ -131,7 +125,6 @@ def enforce_y_axis_horizontal(fig):
             fig.update_layout(**layout_updates)
     except Exception:
         pass
-
     return fig
 
 def force_theme(fig, theme: dict):
@@ -227,23 +220,7 @@ def force_theme(fig, theme: dict):
 
     return fig
 
-def apply_css(bg_css: str, palette: dict, text: str, muted: str):
-    # Base64 SVG so it won’t break from escaping rules.
-    # Use the current theme text color directly (background-images can’t inherit currentColor reliably).
-    svg = f"""
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
-      <path d="M12 3c-4.97 0-9 3.58-9 8 0 2.95 1.89 5.52 4.66 6.97.63.33 1.34.03 1.63-.63l.54-1.25c.2-.47.66-.78 1.17-.78h1.77c1.1 0 1.99.89 1.99 1.99v1.55c0 .62.5 1.13 1.12 1.13C20.64 19.99 21 15.4 21 11c0-4.42-4.03-8-9-8Z"
-            stroke="{text}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M8.4 10.2h.01M11.2 8.6h.01M14.2 10.2h.01M12.8 12.9h.01"
-            stroke="{text}" stroke-width="2.4" stroke-linecap="round"/>
-      <path d="M16.2 14.7l3.1 3.1c.46.46.46 1.2 0 1.66l-.72.72c-.46.46-1.2.46-1.66 0l-3.1-3.1"
-            stroke="{text}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-    """.strip()
-
-    svg_b64 = base64.b64encode(svg.encode("utf-8")).decode("utf-8")
-    paint_uri = f"data:image/svg+xml;base64,{svg_b64}"
-
+def apply_css(bg_css: str, palette: dict, text: str, muted: str, icon_uri: str):
     st.markdown(
         f"""
         <style>
@@ -329,34 +306,37 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str):
             background: {palette["button_hover_bg"]} !important;
         }}
 
-        /* Icon-only expander summary auto fits */
+        /* Hide the expander summary so there is no arrow or long header box */
         [data-testid="stExpander"] details > summary {{
-            width: fit-content !important;
-            max-width: fit-content !important;
-            padding: 0.52rem 0.68rem !important;
-            border-radius: 14px !important;
+            display: none !important;
+        }}
+
+        /* Circular theme button */
+        #theme_icon_wrap div[data-testid="stButton"] > button {{
+            width: 54px !important;
+            height: 54px !important;
+            padding: 0 !important;
+            border-radius: 999px !important;
             border: 1px solid {palette["border"]} !important;
             background: {palette["widget_bg"]} !important;
-            margin-left: auto !important;
+            box-shadow: none !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            font-size: 0 !important;
+            line-height: 0 !important;
         }}
 
-        /* Hide Streamlit’s caret icon (usually an svg in the summary) */
-        [data-testid="stExpander"] details > summary svg {{
-            display: none !important;
+        #theme_icon_wrap div[data-testid="stButton"] > button:hover {{
+            background: {palette["button_hover_bg"]} !important;
         }}
 
-        /* Hide default label text */
-        [data-testid="stExpander"] details > summary p {{
-            display: none !important;
-        }}
-
-        /* Our paint icon */
-        [data-testid="stExpander"] details > summary::before {{
+        #theme_icon_wrap div[data-testid="stButton"] > button::before {{
             content: "" !important;
-            display: inline-block !important;
-            width: 20px !important;
-            height: 20px !important;
-            background-image: url("{paint_uri}") !important;
+            display: block !important;
+            width: 30px !important;
+            height: 30px !important;
+            background-image: url("{icon_uri}") !important;
             background-size: contain !important;
             background-repeat: no-repeat !important;
             background-position: center !important;
@@ -433,9 +413,17 @@ with header_left:
     except Exception:
         preview_dialog = None
 
+# Theme panel toggle state
+if "theme_open" not in st.session_state:
+    st.session_state.theme_open = False
+
 with header_right:
-    # label intentionally blank so CSS replaces it with the icon
-    with st.expander(" ", expanded=False):
+    st.markdown("<div id='theme_icon_wrap'></div>", unsafe_allow_html=True)
+    if st.button("Theme", key="theme_toggle_btn", help="Theme"):
+        st.session_state.theme_open = not st.session_state.theme_open
+
+    # The actual panel (summary hidden by CSS, so no arrow / box)
+    with st.expander(" ", expanded=st.session_state.theme_open):
         bg_mode = st.selectbox("Background Type", ["Solid", "Gradient", "Image"], index=1, key="bg_mode_top")
 
         img_upload = None
@@ -533,7 +521,21 @@ palette = {
     "button_hover_bg": button_hover_bg,
     "button_text": button_text,
 }
-apply_css(bg_css, palette, page_text, page_muted)
+
+# Create icon as base64 SVG with current page text color
+paint_svg = f"""
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+  <path d="M12 3c-4.97 0-9 3.58-9 8 0 2.95 1.89 5.52 4.66 6.97.63.33 1.34.03 1.63-.63l.54-1.25c.2-.47.66-.78 1.17-.78h1.77c1.1 0 1.99.89 1.99 1.99v1.55c0 .62.5 1.13 1.12 1.13C20.64 19.99 21 15.4 21 11c0-4.42-4.03-8-9-8Z"
+        stroke="{page_text}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M8.4 10.2h.01M11.2 8.6h.01M14.2 10.2h.01M12.8 12.9h.01"
+        stroke="{page_text}" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M16.2 14.7l3.1 3.1c.46.46.46 1.2 0 1.66l-.72.72c-.46.46-1.2.46-1.66 0l-3.1-3.1"
+        stroke="{page_text}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+""".strip()
+icon_uri = "data:image/svg+xml;base64," + base64.b64encode(paint_svg.encode("utf-8")).decode("utf-8")
+
+apply_css(bg_css, palette, page_text, page_muted, icon_uri)
 
 plotly_template = "plotly_dark" if dark else "plotly_white"
 pio.templates.default = plotly_template
