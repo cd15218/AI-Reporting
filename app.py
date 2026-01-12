@@ -228,6 +228,27 @@ def force_theme(fig, theme: dict):
     return fig
 
 def apply_css(bg_css: str, palette: dict, text: str, muted: str):
+    # Custom paint icon SVG (monochrome, inherits theme text color via CSS)
+    paint_svg = """
+    <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'>
+      <path d='M12 3c-4.97 0-9 3.58-9 8 0 2.95 1.89 5.52 4.66 6.97.63.33 1.34.03 1.63-.63l.54-1.25c.2-.47.66-.78 1.17-.78h1.77c1.1 0 1.99.89 1.99 1.99v1.55c0 .62.5 1.13 1.12 1.13C20.64 19.99 21 15.4 21 11c0-4.42-4.03-8-9-8Z' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/>
+      <path d='M8.4 10.2h.01M11.2 8.6h.01M14.2 10.2h.01M12.8 12.9h.01' stroke='currentColor' stroke-width='2.4' stroke-linecap='round'/>
+      <path d='M16.2 14.7l3.1 3.1c.46.46.46 1.2 0 1.66l-.72.72c-.46.46-1.2.46-1.66 0l-3.1-3.1' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/>
+    </svg>
+    """.strip()
+
+    paint_data_uri = "data:image/svg+xml;utf8," + (
+        paint_svg.replace("#", "%23")
+                 .replace("\n", "")
+                 .replace("\r", "")
+                 .replace("  ", " ")
+                 .replace("<", "%3C")
+                 .replace(">", "%3E")
+                 .replace('"', "%22")
+                 .replace("'", "%27")
+                 .replace(" ", "%20")
+    )
+
     st.markdown(
         f"""
         <style>
@@ -312,6 +333,36 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str):
         .stButton>button:hover {{
             background: {palette["button_hover_bg"]} !important;
         }}
+
+        /* Icon-only expander header (auto-fit box) */
+        [data-testid="stExpander"] details > summary {{
+            width: fit-content !important;
+            max-width: fit-content !important;
+            padding: 0.48rem 0.62rem !important;
+            border-radius: 14px !important;
+            border: 1px solid {palette["border"]} !important;
+            background: {palette["widget_bg"]} !important;
+            margin-left: auto !important;
+        }}
+        /* Hide the default caret icon */
+        [data-testid="stExpander"] details > summary svg {{
+            display: none !important;
+        }}
+        /* Hide default text */
+        [data-testid="stExpander"] details > summary p {{
+            display: none !important;
+        }}
+        /* Add our paint icon */
+        [data-testid="stExpander"] details > summary::before {{
+            content: "" !important;
+            display: inline-block !important;
+            width: 20px !important;
+            height: 20px !important;
+            background-image: url("{paint_data_uri}") !important;
+            background-size: contain !important;
+            background-repeat: no-repeat !important;
+            background-position: center !important;
+        }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -365,7 +416,7 @@ for name, hx in SOLID_PALETTES.items():
 SOLID_PALETTE_OPTIONS = [_unique_hex_to_name[hx] for hx in _unique_hex_to_name]
 
 # ---------------------------
-# Header area: title at top, upload on left, appearance narrow on right
+# Header area: title at top, upload on left, icon-only appearance on right
 # ---------------------------
 
 st.markdown("# Dataset Reporting")
@@ -375,7 +426,6 @@ header_left, header_right = st.columns([3, 1], vertical_alignment="top")
 with header_left:
     st.write("Upload a CSV or Excel file to generate key statistics and charts.")
     file_top = st.file_uploader("Upload Dataset", type=["csv", "xlsx", "xls"], key="data_upload_top")
-    preview_clicked = False
 
     try:
         @st.dialog("Dataset Preview")
@@ -386,7 +436,8 @@ with header_left:
         preview_dialog = None
 
 with header_right:
-    with st.expander("🎨 Appearance", expanded=False):
+    # Label is intentionally a single space; CSS hides it and replaces with our icon
+    with st.expander(" ", expanded=False):
         bg_mode = st.selectbox("Background Type", ["Solid", "Gradient", "Image"], index=1, key="bg_mode_top")
 
         img_upload = None
@@ -399,15 +450,16 @@ with header_right:
         if bg_mode == "Solid":
             solid_choice = st.selectbox("Solid Palette", SOLID_PALETTE_OPTIONS, index=0, key="solid_choice_top")
             solid_picker = st.color_picker(
-                "Solid Color Picker",
+                "Solid",
                 value=SOLID_PALETTES.get(solid_choice, "#0f172a"),
                 key="solid_picker_top",
+                label_visibility="collapsed",
             )
 
         if bg_mode == "Gradient":
             st.caption("Real gradient background.")
-            grad_a = st.color_picker("Gradient Color A", value=grad_a, key="grad_a_top")
-            grad_b = st.color_picker("Gradient Color B", value=grad_b, key="grad_b_top")
+            grad_a = st.color_picker("Color A", value=grad_a, key="grad_a_top")
+            grad_b = st.color_picker("Color B", value=grad_b, key="grad_b_top")
             grad_angle = st.slider("Angle", 0, 360, grad_angle, key="grad_angle_top")
 
         if bg_mode == "Image":
@@ -420,6 +472,16 @@ with header_right:
 # ---------------------------
 # Theme construction
 # ---------------------------
+
+# Pull current appearance values back out of session state, because expander scope can vary
+bg_mode = st.session_state.get("bg_mode_top", "Gradient")
+
+img_upload = st.session_state.get("bg_image_top", None)  # file uploader object or None
+solid_choice = st.session_state.get("solid_choice_top", SOLID_PALETTE_OPTIONS[0] if SOLID_PALETTE_OPTIONS else "Slate")
+solid_picker = st.session_state.get("solid_picker_top", SOLID_PALETTES.get(solid_choice, "#0f172a"))
+grad_a = st.session_state.get("grad_a_top", "#0b1020")
+grad_b = st.session_state.get("grad_b_top", "#123055")
+grad_angle = st.session_state.get("grad_angle_top", 135)
 
 img_b64, img_mime = b64_image(img_upload)
 
@@ -509,43 +571,56 @@ except Exception as e:
 numeric_cols = df.select_dtypes(include="number").columns.tolist()
 categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
 
-# Show preview button under uploader after upload
-max_preview_rows = st.session_state.get("max_preview_rows_main", 25)
-if preview_dialog is not None:
-    preview_clicked = st.button("Preview Dataset", key="preview_dataset_btn_top")
-    if preview_clicked:
-        preview_dialog(df, int(max_preview_rows))
-
 # ---------------------------
-# Key Statistics controls (formerly sidebar filters)
+# Filters section (single horizontal row, small)
 # ---------------------------
 
-st.subheader("Key Statistics")
+st.markdown("### Filters")
 
-filters_row_1, filters_row_2 = st.columns([2, 2])
-with filters_row_1:
+f1, f2, f3, f_spacer = st.columns([2.1, 1.4, 1.4, 5.1], vertical_alignment="center")
+
+with f1:
     report_type = st.selectbox(
         "Report Type",
         ["Overview", "Trends", "Quality Check", "Executive Summary"],
         index=0,
         key="report_type_main",
+        label_visibility="collapsed",
+        placeholder="Report Type",
     )
-with filters_row_2:
+    st.caption("Report Type")
+
+with f2:
     max_categories = st.slider(
-        "Max Categories Per Chart",
+        "Max Categories",
         5,
         50,
         20,
         key="max_categories_main",
+        label_visibility="collapsed",
     )
+    st.caption("Max Categories")
 
-max_preview_rows = st.slider(
-    "Preview Rows",
-    5,
-    100,
-    25,
-    key="max_preview_rows_main",
-)
+with f3:
+    max_preview_rows = st.slider(
+        "Preview Rows",
+        5,
+        100,
+        25,
+        key="max_preview_rows_main",
+        label_visibility="collapsed",
+    )
+    st.caption("Preview Rows")
+
+preview_clicked = st.button("Preview Dataset", key="preview_dataset_btn_top")
+if preview_dialog is not None and preview_clicked:
+    preview_dialog(df, int(max_preview_rows))
+
+# ---------------------------
+# Key Statistics
+# ---------------------------
+
+st.subheader("Key Statistics")
 
 default_idx = 1 if len(numeric_cols) > 0 else 0
 primary_numeric = st.selectbox(
@@ -573,7 +648,6 @@ summary, visuals_kpi, numeric_df, categorical_df = build_visuals(
     max_categories=max_categories,
 )
 
-# KPI metrics
 kpi_cols = st.columns(5)
 if primary_numeric != "None":
     stats = compute_numeric_stats(df, primary_numeric)
