@@ -15,21 +15,21 @@ def build_visuals(df: pd.DataFrame, report_type: str):
 
     visuals = []
 
-    # 1) Summary KPIs
     summary = {
+        "report_type": report_type,
         "rows": int(df.shape[0]),
         "columns": int(df.shape[1]),
         "numeric_columns": numeric_cols,
         "categorical_columns": cat_cols,
     }
 
-    # 2) Default chart: distribution of the first numeric column
+    # Distribution chart for the first numeric column
     if numeric_cols:
         col = numeric_cols[0]
         fig = px.histogram(df, x=col, title=f"Distribution of {col}")
         visuals.append(("histogram", fig))
 
-    # 3) If you have at least one categorical and one numeric: bar chart by category
+    # Average numeric value by the first categorical column
     if cat_cols and numeric_cols:
         cat = cat_cols[0]
         val = numeric_cols[0]
@@ -39,7 +39,7 @@ def build_visuals(df: pd.DataFrame, report_type: str):
         fig = px.bar(grouped, x=cat, y=val, title=f"Average {val} by {cat}")
         visuals.append(("bar", fig))
 
-    # 4) If you have two numeric columns: scatter plot
+    # Scatter plot if at least two numeric columns exist
     if len(numeric_cols) >= 2:
         xcol = numeric_cols[0]
         ycol = numeric_cols[1]
