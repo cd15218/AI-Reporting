@@ -236,7 +236,6 @@ def apply_background_and_theme_css(
             box-shadow: 0 0 0 3px {focus_ring} !important;
         }}
 
-        /* Link style button */
         .link-btn button {{
             background: transparent !important;
             border: none !important;
@@ -422,16 +421,19 @@ except Exception:
 
 st.divider()
 
-# ---------------- KEY STATISTICS ----------------
+# ---------------- KEY STATISTICS + RADIAL VISUAL ----------------
 
 st.subheader("Key Statistics")
 
-left, right = st.columns([1, 2])
+# 3 column layout: selector, metrics, radial chart
+left, mid, right = st.columns([1, 2, 2])
 
 with left:
+    default_kpi_index = 1 if len(numeric_cols) > 0 else 0
     primary_numeric = st.selectbox(
         "Primary Numeric Column (KPIs)",
         options=["None"] + numeric_cols,
+        index=default_kpi_index,
         key="kpi_primary_numeric"
     )
 
@@ -455,7 +457,7 @@ summary, visuals_kpi, numeric_df, categorical_df = build_visuals(
     max_categories=max_categories
 )
 
-with right:
+with mid:
     k1, k2, k3, k4 = st.columns(4)
 
     if summary["primary_numeric_column"]:
@@ -475,6 +477,73 @@ with right:
     k6.metric("Numeric Columns", summary["numeric_count"])
     k7.metric("Categorical Columns", summary["categorical_count"])
     k8.metric("Missing Cells", summary["missing_cells"])
+
+with right:
+    st.markdown("Radial Category Breakdown")
+
+    default_cat_index = 1 if len(categorical_cols) > 0 else 0
+    radial_col_kpi = st.selectbox(
+        "Category Column",
+        options=["None"] + categorical_cols,
+        index=default_cat_index,
+        key="kpi_radial_col"
+    )
+
+    radial_mode_label = st.selectbox(
+        "Value Type",
+        options=["Count", "Sum of Numeric Column"],
+        index=0,
+        key="kpi_radial_mode"
+    )
+
+    radial_value_col_kpi = None
+    if radial_mode_label == "Sum of Numeric Column":
+        if len(numeric_cols) == 0:
+            st.info("No numeric columns available to sum.")
+        else:
+            numeric_default_idx = 0
+            if primary_numeric != "None" and primary_numeric in numeric_cols:
+                numeric_default_idx = numeric_cols.index(primary_numeric)
+
+            radial_value_col_kpi = st.selectbox(
+                "Numeric Column to Sum",
+                options=numeric_cols,
+                index=numeric_default_idx,
+                key="kpi_radial_value_col"
+            )
+
+    if radial_col_kpi != "None" and len(categorical_cols) > 0:
+        radial_mode = "sum" if radial_mode_label == "Sum of Numeric Column" else "count"
+
+        user_choices_radial_kpi = {
+            "primary_numeric": None if primary_numeric == "None" else primary_numeric,
+            "scatter_x": None,
+            "scatter_y": None,
+            "category_volume": None,
+            "category_a": None,
+            "category_b": None,
+            "radial_category_col": radial_col_kpi,
+            "radial_categories": [],
+            "radial_mode": radial_mode,
+            "radial_value_col": radial_value_col_kpi,
+        }
+
+        _, visuals_radial_kpi, _, _ = build_visuals(
+            df=df,
+            report_type=report_type,
+            user_choices=user_choices_radial_kpi,
+            max_categories=max_categories
+        )
+
+        fig = get_fig(visuals_radial_kpi, "radial_donut")
+        if fig is not None:
+            fig = apply_plotly_theme(fig, theme)
+            st.plotly_chart(fig, use_container_width=True)
+            st.caption("Colors use different shades of one base color for a cohesive look.")
+        else:
+            st.info("Select a valid category column to generate the radial chart.")
+    else:
+        st.info("No categorical columns found for a radial chart.")
 
 with st.expander("Numeric Statistics Table"):
     st.dataframe(numeric_df, use_container_width=True)
@@ -533,7 +602,7 @@ with st.expander("Numeric Comparison Scatter Plot", expanded=scatter_ready):
         st.selectbox("X Axis (Numeric)", options=["None"] + numeric_cols, key="scatter_x")
         st.selectbox("Y Axis (Numeric)", options=["None"] + numeric_cols, key="scatter_y")
 
-    user_choices = {
+    user_choices_scatter = {
         "primary_numeric": None,
         "scatter_x": None if st.session_state["scatter_x"] == "None" else st.session_state["scatter_x"],
         "scatter_y": None if st.session_state["scatter_y"] == "None" else st.session_state["scatter_y"],
@@ -546,7 +615,7 @@ with st.expander("Numeric Comparison Scatter Plot", expanded=scatter_ready):
         "radial_value_col": None,
     }
 
-    _, visuals_scatter, _, _ = build_visuals(df, report_type, user_choices, max_categories)
+    _, visuals_scatter, _, _ = build_visuals(df, report_type, user_choices_scatter, max_categories)
 
     with chart:
         fig = get_fig(visuals_scatter, "numeric_scatter")
@@ -562,7 +631,7 @@ with st.expander("Category Distribution Bar Chart", expanded=cat_volume_ready):
     with controls:
         st.selectbox("Category Column", options=["None"] + categorical_cols, key="cat_volume_col")
 
-    user_choices = {
+    user_choices_cat_vol = {
         "primary_numeric": None,
         "scatter_x": None,
         "scatter_y": None,
@@ -575,7 +644,7 @@ with st.expander("Category Distribution Bar Chart", expanded=cat_volume_ready):
         "radial_value_col": None,
     }
 
-    _, visuals_cat_vol, _, _ = build_visuals(df, report_type, user_choices, max_categories)
+    _, visuals_cat_vol, _, _ = build_visuals(df, report_type, user_choices_cat_vol, max_categories)
 
     with chart:
         fig = get_fig(visuals_cat_vol, "category_volume")
@@ -592,7 +661,7 @@ with st.expander("Category Relationship Heatmap", expanded=heatmap_ready):
         st.selectbox("Category A", options=["None"] + categorical_cols, key="cat_a")
         st.selectbox("Category B", options=["None"] + categorical_cols, key="cat_b")
 
-    user_choices = {
+    user_choices_heatmap = {
         "primary_numeric": None,
         "scatter_x": None,
         "scatter_y": None,
@@ -605,7 +674,7 @@ with st.expander("Category Relationship Heatmap", expanded=heatmap_ready):
         "radial_value_col": None,
     }
 
-    _, visuals_heatmap, _, _ = build_visuals(df, report_type, user_choices, max_categories)
+    _, visuals_heatmap, _, _ = build_visuals(df, report_type, user_choices_heatmap, max_categories)
 
     with chart:
         fig = get_fig(visuals_heatmap, "category_heatmap")
@@ -659,7 +728,7 @@ with st.expander("Radial Category Donut Chart", expanded=radial_ready):
     radial_mode = "sum" if st.session_state["radial_mode"] == "Sum of Numeric Column" else "count"
     radial_value_col = None if st.session_state["radial_value_col"] == "None" else st.session_state["radial_value_col"]
 
-    user_choices = {
+    user_choices_radial = {
         "primary_numeric": None,
         "scatter_x": None,
         "scatter_y": None,
@@ -672,7 +741,7 @@ with st.expander("Radial Category Donut Chart", expanded=radial_ready):
         "radial_value_col": radial_value_col,
     }
 
-    _, visuals_radial, _, _ = build_visuals(df, report_type, user_choices, max_categories)
+    _, visuals_radial, _, _ = build_visuals(df, report_type, user_choices_radial, max_categories)
 
     with chart:
         fig = get_fig(visuals_radial, "radial_donut")
