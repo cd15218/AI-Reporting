@@ -101,22 +101,22 @@ def apply_background_and_theme_css(
     option_selected_text = "#ffffff" if dark else "#0f172a"
     focus_ring = "rgba(148, 163, 184, 0.40)" if dark else "rgba(15, 23, 42, 0.25)"
 
-    # ---------------- BACKGROUND (FULL PAGE) ----------------
+    # ---------------- BUILD BACKGROUND STYLE ----------------
     if mode == "Solid":
-        page_bg_rule = f"background: {solid_hex} !important;"
+        bg_style = f"background: {solid_hex} !important;"
     elif mode == "Gradient":
-        page_bg_rule = f"background: {gradient_css} !important;"
+        bg_style = f"background-image: {gradient_css} !important; background-attachment: fixed !important;"
     else:
-        page_bg_rule = (
-            f"""
-            background-image: url("data:{image_mime};base64,{image_b64}") !important;
-            background-size: cover !important;
-            background-position: center !important;
-            background-repeat: no-repeat !important;
+        if image_b64:
+            bg_style = f"""
+                background-image: url("data:{image_mime};base64,{image_b64}") !important;
+                background-size: cover !important;
+                background-position: center !important;
+                background-repeat: no-repeat !important;
+                background-attachment: fixed !important;
             """
-            if image_b64
-            else "background: #0f172a !important;"
-        )
+        else:
+            bg_style = "background: #0f172a !important;"
 
     st.markdown(
         f"""
@@ -133,33 +133,19 @@ def apply_background_and_theme_css(
             display: none !important;
         }}
 
-        /* ---- Force Streamlit surfaces transparent so the page background is visible ---- */
-        html, body {{
-            background: transparent !important;
-        }}
+        /* --- Most reliable Streamlit background application --- */
+        html, body, .stApp,
         [data-testid="stAppViewContainer"],
         [data-testid="stAppViewContainer"] > .main {{
-            background: transparent !important;
+            {bg_style}
         }}
 
-        /* ---- True full screen background layer ---- */
-        body::before {{
-            content: "";
-            position: fixed;
-            inset: 0;
-            z-index: 0;
-            {page_bg_rule}
-            pointer-events: none;
-        }}
-
-        /* Ensure app renders above background */
+        /* Make sure Streamlit does not paint over the page background */
         [data-testid="stAppViewContainer"] {{
-            position: relative;
-            z-index: 1;
+            background-color: transparent !important;
         }}
-
-        /* Layout padding */
         [data-testid="stAppViewContainer"] > .main {{
+            background-color: transparent !important;
             padding-top: 0rem;
         }}
 
@@ -336,7 +322,6 @@ with st.sidebar:
     custom_solid = ""
     img_upload = None
 
-    # Gradient builder controls
     gradient_color_a = "#0b1020"
     gradient_color_b = "#123055"
     gradient_angle = 135
