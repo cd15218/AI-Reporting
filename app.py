@@ -1,6 +1,8 @@
+# app.py
 import streamlit as st
 import pandas as pd
 import base64
+import plotly.io as pio
 from report_ai import build_visuals
 
 st.set_page_config(page_title="AI Reporting", layout="wide")
@@ -38,23 +40,56 @@ def image_file_to_base64(uploaded_image) -> str:
     data = uploaded_image.getvalue()
     return base64.b64encode(data).decode("utf-8")
 
-def apply_background_css(mode: str, solid_hex: str, gradient_css: str, image_b64: str, image_mime: str):
-    # Content panel styling keeps charts readable even on busy backgrounds
-    panel_css = """
-    .block-container {
-        background: rgba(255, 255, 255, 0.78);
-        border-radius: 18px;
-        padding: 1.2rem 1.2rem;
-        backdrop-filter: blur(6px);
-    }
-    """
+def _hex_to_rgb(hex_color: str):
+    h = hex_color.lstrip("#")
+    if len(h) == 3:
+        h = "".join([c * 2 for c in h])
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
 
+def _relative_luminance(rgb):
+    def channel(c):
+        c = c / 255.0
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+    r, g, b = rgb
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+
+def is_dark_hex(hex_color: str) -> bool:
+    try:
+        lum = _relative_luminance(_hex_to_rgb(hex_color))
+        return lum < 0.40
+    except Exception:
+        return True
+
+def apply_background_and_theme_css(
+    mode: str,
+    solid_hex: str,
+    gradient_css: str,
+    image_b64: str,
+    image_mime: str
+):
+    # Decide theme
+    if mode == "Solid":
+        dark = is_dark_hex(solid_hex)
+    elif mode == "Gradient":
+        # Heuristic: treat gradients containing white as light
+        dark = "ffffff" not in gradient_css.lower()
+    else:
+        # Image backgrounds are unpredictable, default to dark theme + readable panel
+        dark = True
+
+    text = "#e5e7eb" if dark else "#0f172a"
+    muted = "#cbd5e1" if dark else "#334155"
+    card_bg = "rgba(2, 6, 23, 0.55)" if dark else "rgba(255, 255, 255, 0.82)"
+    border = "rgba(148, 163, 184, 0.35)" if dark else "rgba(15, 23, 42, 0.15)"
+    widget_bg = "rgba(255,255,255,0.06)" if dark else "rgba(15,23,42,0.06)"
+
+    # Apply background
     if mode == "Solid":
         bg_css = f"background: {solid_hex} !important;"
     elif mode == "Gradient":
         bg_css = f"background: {gradient_css} !important;"
     else:
-        # Image mode
         if not image_b64:
             bg_css = "background: #0f172a !important;"
         else:
@@ -74,13 +109,72 @@ def apply_background_css(mode: str, solid_hex: str, gradient_css: str, image_b64
         [data-testid="stAppViewContainer"] > .main {{
             {bg_css}
         }}
-        {panel_css}
+
+        /* Main content container */
+        .block-container {{
+            background: {card_bg};
+            border: 1px solid {border};
+            border-radius: 18px;
+            padding: 1.2rem 1.2rem;
+            backdrop-filter: blur(8px);
+        }}
+
+        /* Global text */
+        html, body, [data-testid="stAppViewContainer"] * {{
+            color: {text};
+        }}
+
+        /* Muted text */
+        .stCaption, .stMarkdown p, .stMarkdown li {{
+            color: {muted};
+        }}
+
+        /* Sidebar container */
+        section[data-testid="stSidebar"] > div {{
+            background: {card_bg};
+            border-right: 1px solid {border};
+        }}
+
+        /* Inputs and widgets */
+        div[data-baseweb="select"] > div {{
+            background: {widget_bg};
+            border: 1px solid {border};
+        }}
+        textarea, input {{
+            background: {widget_bg} !important;
+            border: 1px solid {border} !important;
+        }}
+
+        /* Expanders */
+        details {{
+            background: {widget_bg};
+            border: 1px solid {border};
+            border-radius: 12px;
+            padding: 0.35rem 0.6rem;
+        }}
+
+        /* Metric cards */
+        [data-testid="stMetric"] {{
+            background: {widget_bg};
+            border: 1px solid {border};
+            border-radius: 14px;
+            padding: 0.6rem;
+        }}
+
+        /* Dataframe container */
+        [data-testid="stDataFrame"] {{
+            border: 1px solid {border};
+            border-radius: 12px;
+            overflow: hidden;
+        }}
         </style>
         """,
         unsafe_allow_html=True
     )
 
-# ---------------- SIDEBAR: BACKGROUND CONTROLS ----------------
+    return "plotly_dark" if dark else "plotly_white"
+
+# ---------------- SIDEBAR: APPEARANCE + INPUTS ----------------
 with st.sidebar:
     st.header("Appearance")
 
@@ -109,7 +203,7 @@ with st.sidebar:
     }
 
     solid_choice = None
-    custom_solid = None
+    custom_solid = ""
     gradient_choice = None
     img_upload = None
 
@@ -124,25 +218,7 @@ with st.sidebar:
         img_upload = st.file_uploader("Upload background image", type=["png", "jpg", "jpeg", "webp"])
         st.caption("Tip: large images look best. The content panel stays readable.")
 
-# Resolve background settings
-solid_hex = "#0f172a"
-if bg_mode == "Solid":
-    solid_hex = solid_palettes.get(solid_choice or "Slate", "#0f172a")
-    if custom_solid and custom_solid.strip().startswith("#") and len(custom_solid.strip()) in (4, 7):
-        solid_hex = custom_solid.strip()
-
-gradient_css = gradient_presets.get(gradient_choice or "Midnight Blue", gradient_presets["Midnight Blue"])
-
-image_b64 = ""
-image_mime = "image/png"
-if bg_mode == "Image" and img_upload is not None:
-    image_b64 = image_file_to_base64(img_upload)
-    image_mime = img_upload.type or "image/png"
-
-apply_background_css(bg_mode, solid_hex, gradient_css, image_b64, image_mime)
-
-# ---------------- SIDEBAR: APP INPUTS ----------------
-with st.sidebar:
+    st.divider()
     st.header("Inputs")
 
     uploaded_file = st.file_uploader(
@@ -160,6 +236,31 @@ with st.sidebar:
     max_preview_rows = st.slider("Preview rows", 5, 100, 25)
     max_categories = st.slider("Max categories per chart", 5, 50, 20)
 
+# Resolve background settings
+solid_hex = "#0f172a"
+if bg_mode == "Solid":
+    solid_hex = solid_palettes.get(solid_choice or "Slate", "#0f172a")
+    if custom_solid and custom_solid.strip().startswith("#") and len(custom_solid.strip()) in (4, 7):
+        solid_hex = custom_solid.strip()
+
+gradient_css = gradient_presets.get(gradient_choice or "Midnight Blue", gradient_presets["Midnight Blue"])
+
+image_b64 = ""
+image_mime = "image/png"
+if bg_mode == "Image" and img_upload is not None:
+    image_b64 = image_file_to_base64(img_upload)
+    image_mime = img_upload.type or "image/png"
+
+plotly_template = apply_background_and_theme_css(
+    bg_mode,
+    solid_hex,
+    gradient_css,
+    image_b64,
+    image_mime
+)
+pio.templates.default = plotly_template
+
+# ---------------- LOAD DATA ----------------
 if not uploaded_file:
     st.info("Upload a file to get started.")
     st.stop()
@@ -243,6 +344,7 @@ if summary["primary_numeric_column"]:
     with st.expander("Numeric distribution chart", expanded=True):
         fig = get_fig(visuals_kpi, "numeric_distribution")
         if fig is not None:
+            fig.update_layout(template=plotly_template)
             st.plotly_chart(fig, use_container_width=True)
 
 st.divider()
@@ -307,6 +409,7 @@ with st.expander("Numeric comparison scatter", expanded=scatter_ready):
     with chart:
         fig = get_fig(visuals_scatter, "numeric_scatter")
         if fig is not None:
+            fig.update_layout(template=plotly_template)
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("Select two different numeric columns to generate the scatter chart.")
@@ -335,6 +438,7 @@ with st.expander("Categorical volume chart", expanded=cat_volume_ready):
     with chart:
         fig = get_fig(visuals_cat_vol, "category_volume")
         if fig is not None:
+            fig.update_layout(template=plotly_template)
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("Select a categorical column to generate a category volume chart.")
@@ -364,6 +468,7 @@ with st.expander("Categorical comparison heatmap", expanded=heatmap_ready):
     with chart:
         fig = get_fig(visuals_heatmap, "category_heatmap")
         if fig is not None:
+            fig.update_layout(template=plotly_template)
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("Select two different categorical columns to generate a comparison heatmap.")
@@ -424,6 +529,7 @@ with st.expander("Radial category chart (donut)", expanded=radial_ready):
     with chart:
         fig = get_fig(visuals_radial, "radial_donut")
         if fig is not None:
+            fig.update_layout(template=plotly_template)
             st.plotly_chart(fig, use_container_width=True)
             st.caption("Colors are different shades of one base color for a cohesive look.")
         else:
@@ -431,6 +537,7 @@ with st.expander("Radial category chart (donut)", expanded=radial_ready):
 
 st.divider()
 
+# ---------------- EXPORT ----------------
 st.subheader("Export")
 st.write("Download your cleaned dataset for use in GraphMaker.ai or other visualization tools.")
 
