@@ -71,30 +71,31 @@ def apply_background_and_theme_css(
         dark = is_dark_hex(solid_hex)
 
     elif mode == "Gradient":
-        # Explicit mapping for gradients (no guessing)
         LIGHT_GRADIENTS = {"Light Studio"}
         dark = gradient_name not in LIGHT_GRADIENTS
 
     else:
-        # Image backgrounds are unpredictable
         dark = True
 
     # ---------------- COLOR TOKENS ----------------
-    # Text colors
     text = "#e5e7eb" if dark else "#0f172a"
     muted = "#cbd5e1" if dark else "#334155"
 
-    # Panel colors (this is the “box” behind your content)
-    # Make sure Light Studio never ends up with a dark panel.
     card_bg = "rgba(2, 6, 23, 0.58)" if dark else "rgba(255, 255, 255, 0.92)"
     border = "rgba(148, 163, 184, 0.35)" if dark else "rgba(15, 23, 42, 0.16)"
-
-    # Widget surfaces
     widget_bg = "rgba(255,255,255,0.06)" if dark else "rgba(15,23,42,0.06)"
 
-    # Plotly “card” backgrounds (match the panel, so text never blends into a dark chart box)
     plot_paper_bg = "rgba(2, 6, 23, 0.18)" if dark else "rgba(255, 255, 255, 0.80)"
     plot_plot_bg = "rgba(2, 6, 23, 0.06)" if dark else "rgba(255, 255, 255, 0.55)"
+
+    # Dropdown menu colors (BaseWeb)
+    # Fixes Light Studio hover/selected states where bg + text can match.
+    select_menu_bg = "rgba(15, 23, 42, 0.96)" if dark else "rgba(255, 255, 255, 0.98)"
+    select_item_text = "#e5e7eb" if dark else "#0f172a"
+    select_item_hover_bg = "rgba(148, 163, 184, 0.22)" if dark else "rgba(15, 23, 42, 0.10)"
+    select_item_hover_text = "#e5e7eb" if dark else "#0f172a"
+    select_item_selected_bg = "rgba(148, 163, 184, 0.30)" if dark else "rgba(15, 23, 42, 0.14)"
+    select_item_selected_text = "#ffffff" if dark else "#0f172a"
 
     # ---------------- BACKGROUND CSS ----------------
     if mode == "Solid":
@@ -161,7 +162,7 @@ def apply_background_and_theme_css(
             border-right: 1px solid {border};
         }}
 
-        /* Select widgets */
+        /* Select input (closed state) */
         div[data-baseweb="select"] > div {{
             background: {widget_bg} !important;
             border: 1px solid {border} !important;
@@ -202,11 +203,46 @@ def apply_background_and_theme_css(
             overflow: hidden;
         }}
 
-        /* Code blocks (these can look like “black boxes” on light themes) */
+        /* Code blocks */
         pre, code {{
             background: {widget_bg} !important;
             border: 1px solid {border} !important;
             border-radius: 10px !important;
+        }}
+
+        /* ---------------- BaseWeb Select dropdown menu fixes ----------------
+           Streamlit's selectbox uses BaseWeb. These rules make menu items readable
+           on Light Studio (and stay fine on dark themes).
+        */
+
+        /* Menu panel background */
+        ul[role="listbox"] {{
+            background: {select_menu_bg} !important;
+            border: 1px solid {border} !important;
+            border-radius: 12px !important;
+        }}
+
+        /* Each option (normal) */
+        li[role="option"] {{
+            color: {select_item_text} !important;
+        }}
+
+        /* Hover / active option */
+        li[role="option"]:hover,
+        li[role="option"][aria-selected="false"]:hover {{
+            background: {select_item_hover_bg} !important;
+            color: {select_item_hover_text} !important;
+        }}
+
+        /* Selected option */
+        li[role="option"][aria-selected="true"] {{
+            background: {select_item_selected_bg} !important;
+            color: {select_item_selected_text} !important;
+        }}
+
+        /* Ensure text spans inside options inherit correctly */
+        li[role="option"] * {{
+            color: inherit !important;
         }}
         </style>
         """,
@@ -230,10 +266,6 @@ def apply_background_and_theme_css(
     return plotly_template, theme
 
 def apply_plotly_theme(fig, theme: dict):
-    """
-    Ensure chart title, legend, axes, and backgrounds never blend with the panel.
-    This prevents cases like Light Studio having dark text on a dark chart box.
-    """
     fig.update_layout(
         template=theme["plotly_template"],
         paper_bgcolor=theme["plot_paper_bg"],
@@ -244,7 +276,6 @@ def apply_plotly_theme(fig, theme: dict):
         margin=dict(t=72, l=40, r=40, b=40),
     )
 
-    # Axis label/tick colors (for non-pie charts)
     if hasattr(fig.layout, "xaxis"):
         fig.update_xaxes(
             title_font=dict(color=theme["text"]),
