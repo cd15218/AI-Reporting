@@ -19,7 +19,7 @@ def load_file_to_df(uploaded_file) -> pd.DataFrame:
         return pd.read_csv(uploaded_file)
     if name.endswith(".xlsx") or name.endswith(".xls"):
         return pd.read_excel(uploaded_file)
-    raise ValueError("Unsupported file type. Please upload a CSV or Excel file.")
+    raise ValueError("Unsupported file type.")
 
 def basic_clean(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -83,32 +83,33 @@ def apply_background_and_theme_css(
     elif mode == "Gradient":
         bg_css = f"background: {gradient_css} !important;"
     else:
-        if image_b64:
-            bg_css = f"""
+        bg_css = (
+            f"""
             background-image: url("data:{image_mime};base64,{image_b64}") !important;
             background-size: cover !important;
             background-position: center !important;
             background-repeat: no-repeat !important;
             """
-        else:
-            bg_css = "background: #0f172a !important;"
+            if image_b64
+            else "background: #0f172a !important;"
+        )
 
     st.markdown(
         f"""
         <style>
-        /* Hide Streamlit header/toolbar (can appear as repo/GitHub bar) */
+        /* Keep header so sidebar toggle works, but make it visually minimal */
         header[data-testid="stHeader"] {{
-            display: none;
+            background: transparent !important;
+            height: 0.75rem;
         }}
+
+        /* Hide toolbar buttons (deploy / GitHub-like controls) */
         div[data-testid="stToolbar"] {{
-            display: none;
-        }}
-        #MainMenu {{
             visibility: hidden;
         }}
-        footer {{
-            visibility: hidden;
-        }}
+
+        #MainMenu {{ visibility: hidden; }}
+        footer {{ visibility: hidden; }}
 
         html, body, [data-testid="stAppViewContainer"] {{
             {bg_css}
@@ -118,74 +119,54 @@ def apply_background_and_theme_css(
             padding-top: 0rem;
         }}
 
-        /* Main content container */
         .block-container {{
             background: {card_bg};
             border: 1px solid {border};
             border-radius: 18px;
-            padding: 1.2rem 1.2rem;
+            padding: 1.2rem;
             backdrop-filter: blur(8px);
         }}
 
-        /* Global text */
         html, body, [data-testid="stAppViewContainer"] * {{
             color: {text};
         }}
 
-        /* Muted text */
-        .stCaption, .stMarkdown p, .stMarkdown li {{
+        .stCaption, .stMarkdown p {{
             color: {muted};
         }}
 
-        /* Sidebar container */
         section[data-testid="stSidebar"] > div {{
             background: {card_bg};
             border-right: 1px solid {border};
         }}
 
-        /* Select widgets */
         div[data-baseweb="select"] > div {{
             background: {widget_bg} !important;
             border: 1px solid {border} !important;
         }}
 
-        /* IMPORTANT: do NOT style file inputs, it can break Streamlit uploader */
         textarea, input:not([type="file"]) {{
             background: {widget_bg} !important;
             border: 1px solid {border} !important;
         }}
 
-        /* Make uploader area/button readable */
         [data-testid="stFileUploaderDropzone"] {{
-            background: {widget_bg} !important;
-            border: 1px dashed {border} !important;
-            border-radius: 12px !important;
-        }}
-        [data-testid="stFileUploaderDropzone"] * {{
-            color: {text} !important;
+            background: {widget_bg};
+            border: 1px dashed {border};
+            border-radius: 12px;
         }}
 
-        /* Expanders */
         details {{
             background: {widget_bg};
             border: 1px solid {border};
             border-radius: 12px;
-            padding: 0.35rem 0.6rem;
         }}
 
-        /* Metric cards */
         [data-testid="stMetric"] {{
             background: {widget_bg};
             border: 1px solid {border};
             border-radius: 14px;
             padding: 0.6rem;
-        }}
-
-        /* Dataframe container */
-        [data-testid="stDataFrame"] {{
-            border: 1px solid {border};
-            border-radius: 12px;
-            overflow: hidden;
         }}
         </style>
         """,
@@ -197,10 +178,6 @@ def apply_background_and_theme_css(
 # ---------------- SIDEBAR ----------------
 
 with st.sidebar:
-    st.header("Sidebar")
-    st.caption("This sidebar starts open. Use the arrow at the top-left of the page to hide it anytime.")
-
-    st.divider()
     st.header("Appearance")
 
     bg_mode = st.selectbox("Background type", ["Solid", "Gradient", "Image"], index=1)
@@ -216,77 +193,62 @@ with st.sidebar:
     }
 
     gradient_presets = {
-        "Midnight Blue": "linear-gradient(135deg, #0b1020 0%, #123055 55%, #0b1020 100%)",
-        "Deep Ocean": "linear-gradient(135deg, #06202b 0%, #0b3a5b 55%, #06202b 100%)",
-        "Purple Night": "linear-gradient(135deg, #120b2a 0%, #3b1a66 55%, #120b2a 100%)",
-        "Forest Fade": "linear-gradient(135deg, #061a14 0%, #0b3d2e 55%, #061a14 100%)",
-        "Light Studio": "linear-gradient(135deg, #ffffff 0%, #f3f4f6 60%, #ffffff 100%)",
+        "Midnight Blue": "linear-gradient(135deg, #0b1020, #123055)",
+        "Deep Ocean": "linear-gradient(135deg, #06202b, #0b3a5b)",
+        "Purple Night": "linear-gradient(135deg, #120b2a, #3b1a66)",
+        "Light Studio": "linear-gradient(135deg, #ffffff, #f3f4f6)",
     }
 
-    solid_choice = None
-    custom_solid = ""
-    gradient_choice = None
-    img_upload = None
+    solid_choice = st.selectbox("Solid palette", list(solid_palettes)) if bg_mode == "Solid" else None
+    custom_solid = st.text_input("Custom hex") if bg_mode == "Solid" else ""
 
-    if bg_mode == "Solid":
-        solid_choice = st.selectbox("Solid palette", list(solid_palettes.keys()), index=0, key="solid_palette")
-        custom_solid = st.text_input("Optional custom hex", value="", placeholder="#112233", key="custom_hex")
-
-    if bg_mode == "Gradient":
-        gradient_choice = st.selectbox("Gradient preset", list(gradient_presets.keys()), index=0, key="gradient_preset")
-
-    if bg_mode == "Image":
-        img_upload = st.file_uploader("Upload background image", type=["png", "jpg", "jpeg", "webp"], key="bg_image")
-        st.caption("Tip: large images look best. The content panel stays readable.")
+    gradient_choice = st.selectbox("Gradient preset", list(gradient_presets)) if bg_mode == "Gradient" else None
+    img_upload = st.file_uploader("Background image", ["png", "jpg", "jpeg", "webp"]) if bg_mode == "Image" else None
 
     st.divider()
     st.header("Inputs")
 
-    uploaded_file = st.file_uploader(
-        "Upload CSV or Excel",
-        type=["csv", "xlsx", "xls"],
-        key="data_upload"
-    )
+    uploaded_file = st.file_uploader("Upload CSV or Excel", ["csv", "xlsx", "xls"])
+    report_type = st.selectbox("Report type", ["Overview", "Trends", "Quality Check", "Executive Summary"])
+    max_preview_rows = st.slider("Preview rows", 5, 100, 25)
+    max_categories = st.slider("Max categories per chart", 5, 50, 20)
 
-    report_type = st.selectbox(
-        "Report type",
-        ["Overview", "Trends", "Quality Check", "Executive Summary"],
-        index=0,
-        key="report_type"
-    )
+# ---------------- APPLY THEME ----------------
 
-    max_preview_rows = st.slider("Preview rows", 5, 100, 25, key="preview_rows")
-    max_categories = st.slider("Max categories per chart", 5, 50, 20, key="max_categories")
+solid_hex = solid_palettes.get(solid_choice, "#0f172a")
+if custom_solid.startswith("#"):
+    solid_hex = custom_solid
 
-# Resolve theme inputs
-solid_hex = "#0f172a"
-if bg_mode == "Solid":
-    solid_hex = solid_palettes.get(solid_choice or "Slate", "#0f172a")
-    if custom_solid and custom_solid.strip().startswith("#") and len(custom_solid.strip()) in (4, 7):
-        solid_hex = custom_solid.strip()
-
-gradient_css = gradient_presets.get(gradient_choice or "Midnight Blue", gradient_presets["Midnight Blue"])
-
+gradient_css = gradient_presets.get(gradient_choice, "")
 image_b64 = image_file_to_base64(img_upload)
 image_mime = img_upload.type if img_upload else "image/png"
 
 plotly_template = apply_background_and_theme_css(
-    bg_mode,
-    solid_hex,
-    gradient_css,
-    image_b64,
-    image_mime
+    bg_mode, solid_hex, gradient_css, image_b64, image_mime
 )
 pio.templates.default = plotly_template
 
-# ---------------- MAIN CONTENT ----------------
+# ---------------- MAIN ----------------
 
 st.title("AI Reporting")
-st.write("Upload a CSV or Excel file to generate key statistics and visualizations.")
+st.write("Upload a CSV or Excel file to generate visual analytics.")
 
 if not uploaded_file:
     st.info("Upload a dataset to begin.")
     st.stop()
 
-# (Rest of your app remains the same as your last working version.)
-# NOTE: Keep the rest of the code exactly as you already have it after this point.
+df = basic_clean(load_file_to_df(uploaded_file))
+
+numeric_cols = df.select_dtypes(include="number").columns.tolist()
+categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
+
+summary, visuals, _, _ = build_visuals(
+    df,
+    report_type,
+    {"primary_numeric": None},
+    max_categories
+)
+
+for _, fig in visuals:
+    fig.update_layout(template=plotly_template)
+    st.plotly_chart(fig, use_container_width=True)
