@@ -252,6 +252,8 @@ def load_png_data_uri(path: str) -> str | None:
     try:
         if os.path.exists(path):
             with open(path, "rb") as f:
+           
+
                 b = f.read()
             return "data:image/png;base64," + base64.b64encode(b).decode("utf-8")
     except Exception:
@@ -312,16 +314,13 @@ def inject_dropdown_scroll_to_selected():
           function findSelected(menuEl) {
             if (!menuEl) return null;
 
-            // Preferred selectors
             let sel =
               menuEl.querySelector('[role="option"][aria-selected="true"]') ||
               menuEl.querySelector('[role="option"][data-selected="true"]') ||
               menuEl.querySelector('[role="option"][aria-checked="true"]');
 
-            // Fallback for different BaseWeb builds
             if (!sel) sel = menuEl.querySelector('[aria-selected="true"]') || menuEl.querySelector('[aria-checked="true"]');
 
-            // Another fallback: list item with "selected" in className
             if (!sel) {
               const opts = menuEl.querySelectorAll('[role="option"]');
               for (const o of opts) {
@@ -345,7 +344,6 @@ def inject_dropdown_scroll_to_selected():
           }
 
           function scheduleScroll() {
-            // multiple attempts to catch slow portals and transitions
             requestAnimationFrame(() => scrollAllMenus());
             setTimeout(scrollAllMenus, 30);
             setTimeout(scrollAllMenus, 90);
@@ -353,7 +351,6 @@ def inject_dropdown_scroll_to_selected():
             setTimeout(scrollAllMenus, 320);
           }
 
-          // A) Menus added (portal render)
           const addObs = new MutationObserver((mutations) => {
             let sawSomething = false;
             for (const m of mutations) {
@@ -368,7 +365,6 @@ def inject_dropdown_scroll_to_selected():
           });
           addObs.observe(document.body, { childList: true, subtree: true });
 
-          // B) Menus already exist but toggle visibility (style/class/aria-hidden)
           const attrObs = new MutationObserver((mutations) => {
             for (const m of mutations) {
               const t = m.target;
@@ -385,7 +381,6 @@ def inject_dropdown_scroll_to_selected():
           });
           attrObs.observe(document.body, { attributes: true, subtree: true, attributeFilter: ["style", "class", "aria-hidden", "aria-expanded"] });
 
-          // C) User interaction
           document.addEventListener("pointerdown", (e) => {
             const sel = e.target?.closest?.('div[data-baseweb="select"]');
             if (sel) scheduleScroll();
@@ -529,11 +524,37 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, sidebar_icon_ur
             background: {palette["button_hover_bg"]} !important;
         }}
 
-        /* Sidebar */
+        /* Sidebar: compact but readable */
         section[data-testid="stSidebar"] {{
             background: {sidebar_bg} !important;
             border-right: 1px solid {sidebar_border} !important;
         }}
+
+        /* Reduce overall sidebar padding and vertical rhythm */
+        section[data-testid="stSidebar"] > div {{
+            padding-top: 0.65rem !important;
+            padding-bottom: 0.85rem !important;
+        }}
+
+        /* Less space between widgets in sidebar */
+        section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{
+            gap: 0.45rem !important;
+        }}
+
+        /* Reduce label spacing slightly */
+        section[data-testid="stSidebar"] label {{
+            margin-bottom: 0.10rem !important;
+        }}
+
+        /* Reduce widget margins */
+        section[data-testid="stSidebar"] .stSlider,
+        section[data-testid="stSidebar"] .stSelectbox,
+        section[data-testid="stSidebar"] .stColorPicker,
+        section[data-testid="stSidebar"] .stFileUploader {{
+            margin-top: 0.10rem !important;
+            margin-bottom: 0.20rem !important;
+        }}
+
         section[data-testid="stSidebar"] * {{
             color: {text} !important;
         }}
@@ -601,55 +622,57 @@ if "max_preview_rows_main" not in st.session_state:
     st.session_state["max_preview_rows_main"] = 25
 
 # ---------------------------
-# Sidebar: Appearance + Filters + Jump To
+# Sidebar: compact sections via expanders
 # ---------------------------
 
 with st.sidebar:
-    st.markdown("## Page Appearance")
-    st.selectbox("Background Type", ["Solid", "Gradient", "Image"], index=1, key="bg_mode")
+    with st.expander("Page Appearance", expanded=True):
+        st.selectbox("Background Type", ["Solid", "Gradient", "Image"], index=1, key="bg_mode")
 
-    if st.session_state["bg_mode"] == "Solid":
-        st.selectbox(
-            "Solid Palette",
-            list(SOLID_PALETTES.keys()),
-            index=list(SOLID_PALETTES.keys()).index(
-                st.session_state.get("solid_choice", list(SOLID_PALETTES.keys())[0])
-            ),
-            key="solid_choice",
-            on_change=_sync_solid_picker,
+        if st.session_state["bg_mode"] == "Solid":
+            st.selectbox(
+                "Solid Palette",
+                list(SOLID_PALETTES.keys()),
+                index=list(SOLID_PALETTES.keys()).index(
+                    st.session_state.get("solid_choice", list(SOLID_PALETTES.keys())[0])
+                ),
+                key="solid_choice",
+                on_change=_sync_solid_picker,
+            )
+            st.color_picker("Solid Color", value=st.session_state.get("solid_picker", "#0f172a"), key="solid_picker")
+
+        elif st.session_state["bg_mode"] == "Gradient":
+            st.caption("Real gradient background.")
+            st.color_picker("Color A", value=st.session_state.get("grad_a", "#0b1020"), key="grad_a")
+            st.color_picker("Color B", value=st.session_state.get("grad_b", "#123055"), key="grad_b")
+            st.slider("Angle", 0, 360, int(st.session_state.get("grad_angle", 135)), key="grad_angle")
+
+        elif st.session_state["bg_mode"] == "Image":
+            st.file_uploader("Upload Background Image", type=["png", "jpg", "jpeg", "webp"], key="bg_image")
+
+    st.markdown("<div style='height: 0.35rem;'></div>", unsafe_allow_html=True)
+
+    with st.expander("Filters", expanded=False):
+        st.slider("Max Categories", 5, 50, int(st.session_state.get("max_categories_main", 20)), key="max_categories_main")
+        st.slider("Preview Rows", 5, 100, int(st.session_state.get("max_preview_rows_main", 25)), key="max_preview_rows_main")
+
+    st.markdown("<div style='height: 0.35rem;'></div>", unsafe_allow_html=True)
+
+    with st.expander("Jump To", expanded=False):
+        st.markdown(
+            """
+            - [Upload](#upload)
+            - [Key Statistics](#key-statistics)
+            - [Radial Breakdown](#radial-breakdown)
+            - [Tables](#tables)
+            - [Distribution](#distribution)
+            - [Scatter Plot](#scatter-plot)
+            - [Bar Chart](#bar-chart)
+            - [Heatmap](#heatmap)
+            - [Export](#export)
+            """,
+            unsafe_allow_html=True,
         )
-        st.color_picker("Solid Color", value=st.session_state.get("solid_picker", "#0f172a"), key="solid_picker")
-
-    elif st.session_state["bg_mode"] == "Gradient":
-        st.caption("Real gradient background.")
-        st.color_picker("Color A", value=st.session_state.get("grad_a", "#0b1020"), key="grad_a")
-        st.color_picker("Color B", value=st.session_state.get("grad_b", "#123055"), key="grad_b")
-        st.slider("Angle", 0, 360, int(st.session_state.get("grad_angle", 135)), key="grad_angle")
-
-    elif st.session_state["bg_mode"] == "Image":
-        st.file_uploader("Upload Background Image", type=["png", "jpg", "jpeg", "webp"], key="bg_image")
-
-    st.divider()
-    st.markdown("## Filters")
-    st.slider("Max Categories", 5, 50, int(st.session_state.get("max_categories_main", 20)), key="max_categories_main")
-    st.slider("Preview Rows", 5, 100, int(st.session_state.get("max_preview_rows_main", 25)), key="max_preview_rows_main")
-
-    st.divider()
-    st.markdown("## Jump To")
-    st.markdown(
-        """
-        - [Upload](#upload)
-        - [Key Statistics](#key-statistics)
-        - [Radial Breakdown](#radial-breakdown)
-        - [Tables](#tables)
-        - [Distribution](#distribution)
-        - [Scatter Plot](#scatter-plot)
-        - [Bar Chart](#bar-chart)
-        - [Heatmap](#heatmap)
-        - [Export](#export)
-        """,
-        unsafe_allow_html=True,
-    )
 
 # ---------------------------
 # Theme construction
@@ -764,6 +787,9 @@ left_upload, _ = st.columns([2, 6], vertical_alignment="top")
 with left_upload:
     file_top = st.file_uploader("Upload Dataset", type=["csv", "xlsx", "xls"], key="data_upload_top")
 
+preview_clicked = False
+preview_dialog = None
+if file_top is not None:
     try:
         @st.dialog("Dataset Preview")
         def preview_dialog(df_to_show: pd.DataFrame, rows: int):
@@ -772,7 +798,8 @@ with left_upload:
     except Exception:
         preview_dialog = None
 
-    preview_clicked = st.button("Preview Dataset", key="preview_dataset_btn_under_upload")
+    with left_upload:
+        preview_clicked = st.button("Preview Dataset", key="preview_dataset_btn_under_upload")
 
 if file_top is None:
     st.info("Upload a dataset to begin.")
@@ -790,7 +817,6 @@ if preview_dialog is not None and preview_clicked:
 numeric_cols = df.select_dtypes(include="number").columns.tolist()
 categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
 
-# spacing between upload section and Key Statistics
 st.markdown("<div style='height: 1.25rem;'></div>", unsafe_allow_html=True)
 
 # ---------------------------
