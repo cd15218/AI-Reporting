@@ -233,6 +233,13 @@ def compute_numeric_stats(df: pd.DataFrame, col: str) -> dict:
         "max": float(s.max()),
     }
 
+def default_two_distinct(items: list[str]) -> tuple[str | None, str | None]:
+    if not items:
+        return None, None
+    if len(items) == 1:
+        return items[0], items[0]
+    return items[0], items[1]
+
 # ---------------------------
 # Palettes
 # ---------------------------
@@ -268,31 +275,30 @@ for nm, hx in SOLID_PALETTES.items():
         _unique_hex_to_name[hx_norm] = nm
 SOLID_PALETTE_OPTIONS = [_unique_hex_to_name[hx] for hx in _unique_hex_to_name]
 
-# Keep picker synced to palette selection so solid palettes always apply
 def _sync_solid_picker():
     choice = st.session_state.get("solid_choice_top", None)
     if choice and choice in SOLID_PALETTES:
         st.session_state["solid_picker_top"] = SOLID_PALETTES[choice]
 
 # ---------------------------
-# Build theme icon (SVG -> base64)
+# Icon (SVG -> base64)
 # ---------------------------
 
 def build_paint_icon_uri(stroke_hex: str) -> str:
     paint_svg = f"""
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
       <path d="M12 3c-4.97 0-9 3.58-9 8 0 2.95 1.89 5.52 4.66 6.97.63.33 1.34.03 1.63-.63l.54-1.25c.2-.47.66-.78 1.17-.78h1.77c1.1 0 1.99.89 1.99 1.99v1.55c0 .62.5 1.13 1.12 1.13C20.64 19.99 21 15.4 21 11c0-4.42-4.03-8-9-8Z"
-            stroke="{stroke_hex}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            stroke="{stroke_hex}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
       <path d="M8.4 10.2h.01M11.2 8.6h.01M14.2 10.2h.01M12.8 12.9h.01"
-            stroke="{stroke_hex}" stroke-width="2.6" stroke-linecap="round"/>
+            stroke="{stroke_hex}" stroke-width="2.8" stroke-linecap="round"/>
       <path d="M16.2 14.7l3.1 3.1c.46.46.46 1.2 0 1.66l-.72.72c-.46.46-1.2.46-1.66 0l-3.1-3.1"
-            stroke="{stroke_hex}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            stroke="{stroke_hex}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
     """.strip()
     return "data:image/svg+xml;base64," + base64.b64encode(paint_svg.encode("utf-8")).decode("utf-8")
 
 # ---------------------------
-# CSS (includes circular icon expander button + compact layout)
+# CSS
 # ---------------------------
 
 def apply_css(bg_css: str, palette: dict, text: str, muted: str, icon_uri: str):
@@ -325,6 +331,16 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, icon_uri: str):
 
         html, body, [data-testid="stAppViewContainer"] * {{ color: {text}; }}
         .stCaption, .stMarkdown p, .stMarkdown li {{ color: {muted}; }}
+
+        /* Tighten spacing under title */
+        h1 {{
+            margin-bottom: 0.10rem !important;
+            padding-bottom: 0 !important;
+        }}
+        .title-desc-tight p {{
+            margin-top: 0.02rem !important;
+            margin-bottom: 0.35rem !important;
+        }}
 
         div[data-baseweb="select"] > div,
         textarea, input:not([type="file"]) {{
@@ -379,41 +395,35 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, icon_uri: str):
             background: {palette["button_hover_bg"]} !important;
         }}
 
-        /* Make the appearance expander summary a single circular icon button */
+        /* Appearance: borderless circle with icon, no arrow inside */
         [data-testid="stExpander"] details > summary {{
-            width: 64px !important;
-            height: 64px !important;
-            min-height: 64px !important;
+            width: 84px !important;
+            height: 84px !important;
+            min-height: 84px !important;
             padding: 0 !important;
             border-radius: 999px !important;
-            border: 1px solid {palette["border"]} !important;
-            background: {palette["widget_bg"]} !important;
+            border: none !important;
+            box-shadow: none !important;
+            background: transparent !important;
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
             margin-left: auto !important;
         }}
-
-        /* Hide caret arrow inside summary */
-        [data-testid="stExpander"] details > summary svg {{
-            display: none !important;
-        }}
-
-        /* Hide any summary label text */
-        [data-testid="stExpander"] details > summary p {{
-            display: none !important;
-        }}
-
-        /* Paint icon */
+        [data-testid="stExpander"] details > summary svg {{ display: none !important; }}
+        [data-testid="stExpander"] details > summary p {{ display: none !important; }}
         [data-testid="stExpander"] details > summary::before {{
             content: "" !important;
             display: block !important;
-            width: 40px !important;
-            height: 40px !important;
+            width: 54px !important;
+            height: 54px !important;
             background-image: url("{icon_uri}") !important;
             background-size: contain !important;
             background-repeat: no-repeat !important;
             background-position: center !important;
+        }}
+        [data-testid="stExpander"] details > summary:hover {{
+            background: rgba(255,255,255,0.06) !important;
         }}
 
         /* Compact spacing for the filters row */
@@ -433,12 +443,9 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, icon_uri: str):
     )
 
 # ---------------------------
-# Header row (title + circular icon expander)
+# Defaults
 # ---------------------------
 
-st.markdown("# Dataset Reporting")
-
-# defaults for theme panel state
 if "bg_mode_top" not in st.session_state:
     st.session_state["bg_mode_top"] = "Gradient"
 if "solid_choice_top" not in st.session_state:
@@ -452,12 +459,18 @@ if "grad_b_top" not in st.session_state:
 if "grad_angle_top" not in st.session_state:
     st.session_state["grad_angle_top"] = 135
 
-title_col, icon_col = st.columns([7, 1], vertical_alignment="center")
-with title_col:
-    st.caption("Upload a CSV or Excel file to generate key statistics and charts.")
+# ---------------------------
+# Title + description (tight)
+# ---------------------------
 
-with icon_col:
-    # The expander summary is styled into a circular icon button
+st.markdown("# Dataset Reporting")
+st.markdown("<div class='title-desc-tight'>", unsafe_allow_html=True)
+st.markdown("Upload a CSV or Excel file to generate key statistics and charts.")
+st.markdown("</div>", unsafe_allow_html=True)
+
+# Theme controls (render early)
+_, icon_wrap = st.columns([7, 1], vertical_alignment="top")
+with icon_wrap:
     with st.expander(" ", expanded=False):
         bg_mode = st.selectbox("Background Type", ["Solid", "Gradient", "Image"], index=1, key="bg_mode_top")
 
@@ -490,7 +503,7 @@ with icon_col:
             )
 
 # ---------------------------
-# Theme construction (must happen after controls exist)
+# Theme construction
 # ---------------------------
 
 bg_mode = st.session_state.get("bg_mode_top", "Gradient")
@@ -508,13 +521,11 @@ if bg_mode == "Solid":
     dark = is_dark(solid_hex)
     bg_css = f"background: {solid_hex} !important;"
     accent = solid_hex
-
 elif bg_mode == "Gradient":
     dark = is_dark_grad(grad_a, grad_b)
     grad_css = f"linear-gradient({grad_angle}deg, {grad_a} 0%, {grad_b} 100%)"
     bg_css = f"background-image: {grad_css} !important; background-attachment: fixed !important;"
     accent = grad_b
-
 else:
     dark = True
     if img_b64:
@@ -622,7 +633,7 @@ st.markdown("</div>", unsafe_allow_html=True)
 # Upload section (preview underneath)
 # ---------------------------
 
-left_upload, right_space = st.columns([2, 6], vertical_alignment="top")
+left_upload, _ = st.columns([2, 6], vertical_alignment="top")
 with left_upload:
     file_top = st.file_uploader("Upload Dataset", type=["csv", "xlsx", "xls"], key="data_upload_top")
 
@@ -634,7 +645,6 @@ with left_upload:
     except Exception:
         preview_dialog = None
 
-# Stop until upload exists
 if file_top is None:
     st.info("Upload a dataset to begin.")
     st.stop()
@@ -656,24 +666,30 @@ numeric_cols = df.select_dtypes(include="number").columns.tolist()
 categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
 
 # ---------------------------
-# Key Statistics
+# Key Statistics (compact KPI control on left)
 # ---------------------------
 
 st.subheader("Key Statistics")
 
-default_idx = 1 if len(numeric_cols) > 0 else 0
-primary_numeric = st.selectbox(
-    "Primary Numeric Column (KPIs)",
-    options=["None"] + numeric_cols,
-    index=default_idx,
-    key="kpi_primary_numeric",
-)
+kpi_left, kpi_right = st.columns([2, 6], vertical_alignment="top")
+
+with kpi_left:
+    if numeric_cols:
+        primary_numeric = st.selectbox(
+            "Primary Numeric Column (KPIs)",
+            options=numeric_cols,
+            index=0,
+            key="kpi_primary_numeric",
+        )
+    else:
+        primary_numeric = None
+        st.info("No numeric columns found for KPI statistics.")
 
 summary, visuals_kpi, numeric_df, categorical_df = build_visuals(
     df=df,
     report_type=st.session_state.get("report_type_main", "Overview"),
     user_choices={
-        "primary_numeric": None if primary_numeric == "None" else primary_numeric,
+        "primary_numeric": primary_numeric,
         "scatter_x": None,
         "scatter_y": None,
         "category_volume": None,
@@ -687,20 +703,21 @@ summary, visuals_kpi, numeric_df, categorical_df = build_visuals(
     max_categories=int(st.session_state.get("max_categories_main", 20)),
 )
 
-kpi_cols = st.columns(5)
-if primary_numeric != "None":
-    stats = compute_numeric_stats(df, primary_numeric)
-    kpi_cols[0].metric(f"Total {primary_numeric}", stats["sum"])
-    kpi_cols[1].metric(f"Average {primary_numeric}", stats["mean"])
-    kpi_cols[2].metric(f"Median {primary_numeric}", stats["median"])
-    kpi_cols[3].metric(f"Minimum {primary_numeric}", stats["min"])
-    kpi_cols[4].metric(f"Maximum {primary_numeric}", stats["max"])
-else:
-    kpi_cols[0].metric("Total", "N/A")
-    kpi_cols[1].metric("Average", "N/A")
-    kpi_cols[2].metric("Median", "N/A")
-    kpi_cols[3].metric("Minimum", "N/A")
-    kpi_cols[4].metric("Maximum", "N/A")
+with kpi_right:
+    kpi_cols = st.columns(5)
+    if primary_numeric:
+        stats = compute_numeric_stats(df, primary_numeric)
+        kpi_cols[0].metric(f"Total {primary_numeric}", stats["sum"])
+        kpi_cols[1].metric(f"Average {primary_numeric}", stats["mean"])
+        kpi_cols[2].metric(f"Median {primary_numeric}", stats["median"])
+        kpi_cols[3].metric(f"Minimum {primary_numeric}", stats["min"])
+        kpi_cols[4].metric(f"Maximum {primary_numeric}", stats["max"])
+    else:
+        kpi_cols[0].metric("Total", "N/A")
+        kpi_cols[1].metric("Average", "N/A")
+        kpi_cols[2].metric("Median", "N/A")
+        kpi_cols[3].metric("Minimum", "N/A")
+        kpi_cols[4].metric("Maximum", "N/A")
 
 meta_cols = st.columns(4)
 meta_cols[0].metric("Total Rows", int(df.shape[0]))
@@ -709,20 +726,23 @@ meta_cols[2].metric("Categorical Columns", int(len(categorical_cols)))
 meta_cols[3].metric("Missing Cells", int(df.isna().sum().sum()))
 
 # ---------------------------
-# Radial chart (part of Key Statistics)
+# Radial chart (defaults not None)
 # ---------------------------
 
 st.markdown("Radial Category Breakdown")
 rad_controls, rad_chart = st.columns([1, 2])
 
 with rad_controls:
-    default_cat_idx = 1 if len(categorical_cols) > 0 else 0
-    radial_col_kpi = st.selectbox(
-        "Category Column",
-        options=["None"] + categorical_cols,
-        index=default_cat_idx,
-        key="kpi_radial_col",
-    )
+    if categorical_cols:
+        radial_col_kpi = st.selectbox(
+            "Category Column",
+            options=categorical_cols,
+            index=0,
+            key="kpi_radial_col",
+        )
+    else:
+        radial_col_kpi = None
+        st.info("No categorical columns found for a radial chart.")
 
     radial_mode_label = st.selectbox(
         "Value Type",
@@ -734,24 +754,23 @@ with rad_controls:
     radial_value_col_kpi = None
     if radial_mode_label == "Sum of Numeric Column":
         if numeric_cols:
-            default_num_idx = numeric_cols.index(primary_numeric) if primary_numeric in numeric_cols else 0
             radial_value_col_kpi = st.selectbox(
                 "Numeric Column to Sum",
                 options=numeric_cols,
-                index=default_num_idx,
+                index=0,
                 key="kpi_radial_value_col",
             )
         else:
             st.info("No numeric columns available to sum.")
 
 with rad_chart:
-    if radial_col_kpi != "None" and categorical_cols:
+    if radial_col_kpi:
         radial_mode = "sum" if radial_mode_label == "Sum of Numeric Column" else "count"
         _, visuals_radial_kpi, _, _ = build_visuals(
             df=df,
             report_type=st.session_state.get("report_type_main", "Overview"),
             user_choices={
-                "primary_numeric": None if primary_numeric == "None" else primary_numeric,
+                "primary_numeric": primary_numeric,
                 "scatter_x": None,
                 "scatter_y": None,
                 "category_volume": None,
@@ -770,12 +789,12 @@ with rad_chart:
             st.plotly_chart(fig, use_container_width=True, key="chart_kpi_radial_donut")
             st.caption("Colors use different shades of the active theme accent.")
         else:
-            st.info("Select a valid category column to generate the radial chart.")
+            st.info("Radial chart could not be generated for this column.")
     else:
-        st.info("No categorical columns found for a radial chart.")
+        st.info("Add a categorical column to see the radial chart.")
 
 # ---------------------------
-# Tabs
+# Tabs (defaults not None for all)
 # ---------------------------
 
 tabs = st.tabs(["Tables", "Distribution", "Scatter Plot", "Bar Chart", "Heatmap", "Export"])
@@ -787,7 +806,7 @@ with tabs[0]:
 
 with tabs[1]:
     st.subheader("Distribution")
-    if primary_numeric != "None":
+    if primary_numeric:
         fig = get_fig(visuals_kpi, "numeric_distribution")
         if fig is not None:
             fig = enforce_y_axis_horizontal(force_theme(fig, theme))
@@ -795,22 +814,31 @@ with tabs[1]:
         else:
             st.info("No distribution chart available for the current selection.")
     else:
-        st.info("Select a numeric column in Key Statistics to view a distribution chart.")
+        st.info("No numeric columns available for a distribution chart.")
 
 with tabs[2]:
     st.subheader("Numeric Comparison Scatter Plot")
     controls, chart = st.columns([1, 2])
+
     with controls:
-        scatter_x = st.selectbox("X Axis (Numeric)", options=["None"] + numeric_cols, key="scatter_x")
-        scatter_y = st.selectbox("Y Axis (Numeric)", options=["None"] + numeric_cols, key="scatter_y")
+        if numeric_cols:
+            sx_default, sy_default = default_two_distinct(numeric_cols)
+            scatter_x = st.selectbox("X Axis (Numeric)", options=numeric_cols, index=0, key="scatter_x")
+            # ensure y defaults to second column if possible
+            y_index = 1 if len(numeric_cols) > 1 else 0
+            scatter_y = st.selectbox("Y Axis (Numeric)", options=numeric_cols, index=y_index, key="scatter_y")
+        else:
+            scatter_x = None
+            scatter_y = None
+            st.info("No numeric columns found for a scatter plot.")
 
     _, visuals, _, _ = build_visuals(
         df,
         st.session_state.get("report_type_main", "Overview"),
         {
             "primary_numeric": None,
-            "scatter_x": None if scatter_x == "None" else scatter_x,
-            "scatter_y": None if scatter_y == "None" else scatter_y,
+            "scatter_x": scatter_x,
+            "scatter_y": scatter_y,
             "category_volume": None,
             "category_a": None,
             "category_b": None,
@@ -823,18 +851,26 @@ with tabs[2]:
     )
 
     with chart:
-        fig = get_fig(visuals, "numeric_scatter")
-        if fig is not None:
-            fig = enforce_y_axis_horizontal(force_theme(fig, theme))
-            st.plotly_chart(fig, use_container_width=True, key="chart_scatter")
+        if scatter_x and scatter_y:
+            fig = get_fig(visuals, "numeric_scatter")
+            if fig is not None:
+                fig = enforce_y_axis_horizontal(force_theme(fig, theme))
+                st.plotly_chart(fig, use_container_width=True, key="chart_scatter")
+            else:
+                st.info("Scatter plot could not be generated for these columns.")
         else:
-            st.info("Select two different numeric columns to generate the scatter plot.")
+            st.info("Add numeric columns to generate the scatter plot.")
 
 with tabs[3]:
     st.subheader("Category Distribution Bar Chart")
     controls, chart = st.columns([1, 2])
+
     with controls:
-        cat_volume_col = st.selectbox("Category Column", options=["None"] + categorical_cols, key="cat_volume_col")
+        if categorical_cols:
+            cat_volume_col = st.selectbox("Category Column", options=categorical_cols, index=0, key="cat_volume_col")
+        else:
+            cat_volume_col = None
+            st.info("No categorical columns found for a bar chart.")
 
     _, visuals, _, _ = build_visuals(
         df,
@@ -843,7 +879,7 @@ with tabs[3]:
             "primary_numeric": None,
             "scatter_x": None,
             "scatter_y": None,
-            "category_volume": None if cat_volume_col == "None" else cat_volume_col,
+            "category_volume": cat_volume_col,
             "category_a": None,
             "category_b": None,
             "radial_category_col": None,
@@ -855,19 +891,29 @@ with tabs[3]:
     )
 
     with chart:
-        fig = get_fig(visuals, "category_volume")
-        if fig is not None:
-            fig = enforce_y_axis_horizontal(force_theme(fig, theme))
-            st.plotly_chart(fig, use_container_width=True, key="chart_category_volume")
+        if cat_volume_col:
+            fig = get_fig(visuals, "category_volume")
+            if fig is not None:
+                fig = enforce_y_axis_horizontal(force_theme(fig, theme))
+                st.plotly_chart(fig, use_container_width=True, key="chart_category_volume")
+            else:
+                st.info("Bar chart could not be generated for this column.")
         else:
-            st.info("Select a categorical column to generate the bar chart.")
+            st.info("Add categorical columns to generate the bar chart.")
 
 with tabs[4]:
     st.subheader("Category Relationship Heatmap")
     controls, chart = st.columns([1, 2])
+
     with controls:
-        cat_a = st.selectbox("Category A", options=["None"] + categorical_cols, key="cat_a")
-        cat_b = st.selectbox("Category B", options=["None"] + categorical_cols, key="cat_b")
+        if categorical_cols:
+            cat_a = st.selectbox("Category A", options=categorical_cols, index=0, key="cat_a")
+            b_index = 1 if len(categorical_cols) > 1 else 0
+            cat_b = st.selectbox("Category B", options=categorical_cols, index=b_index, key="cat_b")
+        else:
+            cat_a = None
+            cat_b = None
+            st.info("No categorical columns found for a heatmap.")
 
     _, visuals, _, _ = build_visuals(
         df,
@@ -877,8 +923,8 @@ with tabs[4]:
             "scatter_x": None,
             "scatter_y": None,
             "category_volume": None,
-            "category_a": None if cat_a == "None" else cat_a,
-            "category_b": None if cat_b == "None" else cat_b,
+            "category_a": cat_a,
+            "category_b": cat_b,
             "radial_category_col": None,
             "radial_categories": [],
             "radial_mode": "count",
@@ -888,12 +934,15 @@ with tabs[4]:
     )
 
     with chart:
-        fig = get_fig(visuals, "category_heatmap")
-        if fig is not None:
-            fig = enforce_y_axis_horizontal(force_theme(fig, theme))
-            st.plotly_chart(fig, use_container_width=True, key="chart_heatmap")
+        if cat_a and cat_b:
+            fig = get_fig(visuals, "category_heatmap")
+            if fig is not None:
+                fig = enforce_y_axis_horizontal(force_theme(fig, theme))
+                st.plotly_chart(fig, use_container_width=True, key="chart_heatmap")
+            else:
+                st.info("Heatmap could not be generated for these columns.")
         else:
-            st.info("Select two different categorical columns to generate the heatmap.")
+            st.info("Add categorical columns to generate the heatmap.")
 
 with tabs[5]:
     st.subheader("Export")
