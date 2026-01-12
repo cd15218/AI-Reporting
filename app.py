@@ -58,20 +58,32 @@ def is_dark_hex(hex_color: str) -> bool:
     except Exception:
         return True
 
+def is_dark_gradient(hex_a: str, hex_b: str) -> bool:
+    """
+    Decide whether the overall gradient should be treated as dark.
+    Uses average luminance of the two endpoints.
+    """
+    try:
+        lum_a = _relative_luminance(_hex_to_rgb(hex_a))
+        lum_b = _relative_luminance(_hex_to_rgb(hex_b))
+        return ((lum_a + lum_b) / 2.0) < 0.40
+    except Exception:
+        return True
+
 def apply_background_and_theme_css(
     mode: str,
     solid_hex: str,
     gradient_css: str,
     image_b64: str,
     image_mime: str,
-    gradient_name: str | None
+    gradient_dark: bool | None
 ):
     # ---------------- THEME DECISION ----------------
     if mode == "Solid":
         dark = is_dark_hex(solid_hex)
     elif mode == "Gradient":
-        LIGHT_GRADIENTS = {"Light Studio"}
-        dark = gradient_name not in LIGHT_GRADIENTS
+        # Use computed darkness from chosen gradient colors
+        dark = True if gradient_dark is None else gradient_dark
     else:
         dark = True
 
@@ -95,8 +107,6 @@ def apply_background_and_theme_css(
     focus_ring = "rgba(148, 163, 184, 0.40)" if dark else "rgba(15, 23, 42, 0.25)"
 
     # ---------------- BACKGROUND LAYERING ----------------
-    # We render backgrounds via a fixed pseudo element, because on some Streamlit builds
-    # applying gradient backgrounds directly to containers can behave like a flat fill.
     solid_bg_rule = f"background: {solid_hex} !important;"
     gradient_bg_rule = f"background: {gradient_css} !important;"
     image_bg_rule = (
@@ -130,12 +140,11 @@ def apply_background_and_theme_css(
             display: none !important;
         }}
 
-        /* Ensure the app container can host the fixed background layer */
         [data-testid="stAppViewContainer"] {{
             position: relative;
         }}
 
-        /* True background layer (solid / gradient / image) */
+        /* True background layer */
         [data-testid="stAppViewContainer"]::before {{
             content: "";
             position: fixed;
@@ -144,7 +153,6 @@ def apply_background_and_theme_css(
             {bg_rule}
         }}
 
-        /* Main content area */
         [data-testid="stAppViewContainer"] > .main {{
             padding-top: 0rem;
         }}
@@ -170,13 +178,11 @@ def apply_background_and_theme_css(
             border-right: 1px solid {border};
         }}
 
-        /* Select input (closed state) */
         div[data-baseweb="select"] > div {{
             background: {widget_bg} !important;
             border: 1px solid {border} !important;
         }}
 
-        /* IMPORTANT: do NOT style file inputs, it can break Streamlit uploader */
         textarea, input:not([type="file"]) {{
             background: {widget_bg} !important;
             border: 1px solid {border} !important;
@@ -213,7 +219,7 @@ def apply_background_and_theme_css(
             border-radius: 10px !important;
         }}
 
-        /* BaseWeb Select dropdown menu (actual Streamlit DOM) */
+        /* BaseWeb Select dropdown menu */
         div[data-baseweb="popover"] div[data-baseweb="menu"] {{
             background: {menu_bg} !important;
             border: 1px solid {border} !important;
@@ -310,25 +316,24 @@ with st.sidebar:
         "Plum": "#2a1033",
     }
 
-    gradient_presets = {
-        "Midnight Blue": "linear-gradient(135deg, #0b1020 0%, #123055 55%, #0b1020 100%)",
-        "Deep Ocean": "linear-gradient(135deg, #06202b 0%, #0b3a5b 55%, #06202b 100%)",
-        "Purple Night": "linear-gradient(135deg, #120b2a 0%, #3b1a66 55%, #120b2a 100%)",
-        "Forest Fade": "linear-gradient(135deg, #061a14 0%, #0b3d2e 55%, #061a14 100%)",
-        "Light Studio": "linear-gradient(135deg, #ffffff 0%, #f3f4f6 60%, #ffffff 100%)",
-    }
-
     solid_choice = None
     custom_solid = ""
-    gradient_choice = None
     img_upload = None
+
+    # Gradient builder controls
+    gradient_color_a = "#0b1020"
+    gradient_color_b = "#123055"
+    gradient_angle = 135
 
     if bg_mode == "Solid":
         solid_choice = st.selectbox("Solid Palette", list(solid_palettes.keys()), index=0, key="solid_palette")
         custom_solid = st.text_input("Optional Custom Hex", value="", placeholder="#112233", key="custom_hex")
 
     if bg_mode == "Gradient":
-        gradient_choice = st.selectbox("Gradient Preset", list(gradient_presets.keys()), index=0, key="gradient_preset")
+        st.caption("Build a real gradient background.")
+        gradient_color_a = st.color_picker("Gradient Color A", value="#0b1020", key="grad_a")
+        gradient_color_b = st.color_picker("Gradient Color B", value="#123055", key="grad_b")
+        gradient_angle = st.slider("Gradient Angle", 0, 360, 135, key="grad_angle")
 
     if bg_mode == "Image":
         img_upload = st.file_uploader("Upload Background Image", type=["png", "jpg", "jpeg", "webp"], key="bg_image")
@@ -360,7 +365,9 @@ if bg_mode == "Solid":
     if custom_solid and custom_solid.strip().startswith("#") and len(custom_solid.strip()) in (4, 7):
         solid_hex = custom_solid.strip()
 
-gradient_css = gradient_presets.get(gradient_choice or "Midnight Blue", gradient_presets["Midnight Blue"])
+# Build true gradient CSS from user inputs
+gradient_css = f"linear-gradient({gradient_angle}deg, {gradient_color_a} 0%, {gradient_color_b} 100%)"
+gradient_dark = is_dark_gradient(gradient_color_a, gradient_color_b)
 
 image_b64 = image_file_to_base64(img_upload)
 image_mime = img_upload.type if img_upload else "image/png"
@@ -371,7 +378,7 @@ plotly_template, theme = apply_background_and_theme_css(
     gradient_css,
     image_b64,
     image_mime,
-    gradient_choice
+    gradient_dark
 )
 pio.templates.default = plotly_template
 
