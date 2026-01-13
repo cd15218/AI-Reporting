@@ -403,235 +403,134 @@ def inject_dropdown_scroll_to_selected():
 # CSS
 # ---------------------------
 
-def apply_css(bg_css: str, palette: dict, text: str, muted: str, sidebar_icon_uri: str | None, dark_mode: bool):
-    icon_css = ""
-    if sidebar_icon_uri:
-        icon_css = f"""
-        [data-testid="stSidebarCollapsedControl"] button::after,
-        [data-testid="stSidebarCollapseButton"] button::after,
-        button[title="Open sidebar"]::after,
-        button[title="Close sidebar"]::after {{
-            content: "" !important;
-            display: inline-block !important;
-            width: 18px !important;
-            height: 18px !important;
-            margin-left: 8px !important;
-            background-image: url("{sidebar_icon_uri}") !important;
-            background-size: contain !important;
-            background-repeat: no-repeat !important;
-            background-position: center !important;
-            opacity: 0.95 !important;
-        }}
-        """
+header[data-testid="stHeader"] { background: transparent !important; }
+[data-testid="stDeployButton"], [data-testid="stStatusWidget"], [data-testid="stToolbarActions"] { display:none !important; }
 
-    # High contrast dropdown/menu colors
-    select_value_color = "#e5e7eb" if dark_mode else "#0f172a"
-    select_placeholder_color = "#cbd5e1" if dark_mode else "#334155"
-    menu_text_color = "#e5e7eb" if dark_mode else "#0f172a"
+html, body, .stApp,
+[data-testid="stAppViewContainer"],
+[data-testid="stAppViewContainer"] > .main {
+    {bg_css}
+}
 
-    sidebar_bg = "rgba(2, 6, 23, 0.78)" if dark_mode else "rgba(255, 255, 255, 0.92)"
-    sidebar_border = palette["border"]
-    sidebar_widget_bg = "rgba(255,255,255,0.10)" if dark_mode else "rgba(15,23,42,0.06)"
-    sidebar_hover = "rgba(148, 163, 184, 0.22)" if dark_mode else "rgba(15, 23, 42, 0.10)"
+[data-testid="stAppViewContainer"] { background-color: transparent !important; }
+[data-testid="stAppViewContainer"] > .main {
+    background-color: transparent !important;
+    padding-top: 0rem !important;
+    padding-bottom: 6.5rem !important;
+}
 
-    st.markdown(
-        f"""
-        <style>
-        header[data-testid="stHeader"] {{ background: transparent !important; }}
-        [data-testid="stDeployButton"], [data-testid="stStatusWidget"], [data-testid="stToolbarActions"] {{ display:none !important; }}
+.block-container {
+    background: {palette["card_bg"]};
+    border: 1px solid {palette["border"]};
+    border-radius: 18px;
+    padding: 1.1rem;
+    backdrop-filter: blur(8px);
+}
 
-        html, body, .stApp,
-        [data-testid="stAppViewContainer"],
-        [data-testid="stAppViewContainer"] > .main {{
-            {bg_css}
-        }}
+html, body, [data-testid="stAppViewContainer"] * { color: {text}; }
+.stCaption, .stMarkdown p, .stMarkdown li { color: {muted}; }
 
-        [data-testid="stAppViewContainer"] {{ background-color: transparent !important; }}
-        [data-testid="stAppViewContainer"] > .main {{
-            background-color: transparent !important;
-            padding-top: 0rem !important;
-            padding-bottom: 6.5rem !important;
-        }}
+/* ===============================
+   FORCE WIDGET LABEL READABILITY
+   =============================== */
 
-        .block-container {{
-            background: {palette["card_bg"]};
-            border: 1px solid {palette["border"]};
-            border-radius: 18px;
-            padding: 1.1rem;
-            backdrop-filter: blur(8px);
-        }}
+/* Widget labels (above dropdowns, sliders, etc) */
+label[data-testid="stWidgetLabel"] p,
+label[data-testid="stWidgetLabel"] span,
+label[data-testid="stWidgetLabel"] div {
+    color: {text} !important;
+    -webkit-text-fill-color: {text} !important;
+    opacity: 1 !important;
+}
 
-        html, body, [data-testid="stAppViewContainer"] * {{ color: {text}; }}
-        .stCaption, .stMarkdown p, .stMarkdown li {{ color: {muted}; }}
+/* Selected value inside selectbox control */
+div[data-baseweb="select"] > div *,
+section[data-testid="stSidebar"] div[data-baseweb="select"] > div * {
+    color: {select_value_color} !important;
+    -webkit-text-fill-color: {select_value_color} !important;
+    opacity: 1 !important;
+}
 
-        h1 {{
-            margin: 0 !important;
-            padding: 0 !important;
-            line-height: 1.08 !important;
-        }}
-        .title-desc-tight p {{
-            margin: 0.12rem 0 0 0 !important;
-            padding: 0 !important;
-        }}
+/* Placeholder text */
+div[data-baseweb="select"] [aria-placeholder="true"],
+div[data-baseweb="select"] [data-baseweb="placeholder"] {
+    color: {select_placeholder_color} !important;
+    opacity: 1 !important;
+}
 
-        /* Selectbox input text and placeholder should always be readable */
-        div[data-baseweb="select"] > div {{
-            background: {palette["widget_bg"]} !important;
-            border: 1px solid {palette["border"]} !important;
-        }}
-        div[data-baseweb="select"] input {{
-            color: {select_value_color} !important;
-            -webkit-text-fill-color: {select_value_color} !important;
-        }}
-        div[data-baseweb="select"] span {{
-            color: {select_value_color} !important;
-        }}
-        div[data-baseweb="select"] [aria-placeholder="true"],
-        div[data-baseweb="select"] [data-baseweb="placeholder"] {{
-            color: {select_placeholder_color} !important;
-        }}
+/* Dropdown menu text */
+div[data-baseweb="popover"] div[data-baseweb="menu"],
+section[data-testid="stSidebar"] div[data-baseweb="popover"] div[data-baseweb="menu"] {
+    background: {palette["menu_bg"]} !important;
+    border: 1px solid {palette["border"]} !important;
+    border-radius: 12px !important;
+}
 
-        /* Dropdown menu text should always be readable */
-        div[data-baseweb="popover"] div[data-baseweb="menu"] {{
-            background: {palette["menu_bg"]} !important;
-            border: 1px solid {palette["border"]} !important;
-            border-radius: 12px !important;
-        }}
-        div[data-baseweb="popover"] div[data-baseweb="menu"] * {{
-            color: {menu_text_color} !important;
-        }}
-        div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"]:hover {{
-            background: {palette["hover_bg"]} !important;
-        }}
+div[data-baseweb="popover"] div[data-baseweb="menu"] *,
+section[data-testid="stSidebar"] div[data-baseweb="popover"] div[data-baseweb="menu"] * {
+    color: {menu_text_color} !important;
+    opacity: 1 !important;
+}
 
-        textarea, input:not([type="file"]) {{
-            background: {palette["widget_bg"]} !important;
-            border: 1px solid {palette["border"]} !important;
-            color: {select_value_color} !important;
-            -webkit-text-fill-color: {select_value_color} !important;
-        }}
+div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"]:hover {
+    background: {palette["hover_bg"]} !important;
+}
 
-        div[data-baseweb="select"] > div:focus-within {{
-            box-shadow: 0 0 0 3px {palette["focus_ring"]} !important;
-        }}
+/* Inputs & textareas */
+textarea, input:not([type="file"]) {
+    background: {palette["widget_bg"]} !important;
+    border: 1px solid {palette["border"]} !important;
+    color: {select_value_color} !important;
+    -webkit-text-fill-color: {select_value_color} !important;
+}
 
-        [data-testid="stFileUploaderDropzone"] {{
-            background: {palette["widget_bg"]};
-            border: 1px dashed {palette["border"]};
-            border-radius: 12px;
-            padding: 0.65rem !important;
-        }}
-        [data-testid="stFileUploaderDropzone"] * {{
-            color: {select_value_color} !important;
-        }}
+/* Focus ring */
+div[data-baseweb="select"] > div:focus-within {
+    box-shadow: 0 0 0 3px {palette["focus_ring"]} !important;
+}
 
-        [data-testid="stMetric"] {{
-            background: {palette["widget_bg"]};
-            border: 1px solid {palette["border"]};
-            border-radius: 14px;
-            padding: 0.6rem;
-        }}
+/* File uploader */
+[data-testid="stFileUploaderDropzone"] {
+    background: {palette["widget_bg"]};
+    border: 1px dashed {palette["border"]};
+    border-radius: 12px;
+    padding: 0.65rem !important;
+}
 
-        button[kind="primary"], button[kind="secondary"], .stButton>button {{
-            background: {palette["button_bg"]} !important;
-            border: 1px solid {palette["border"]} !important;
-            color: {palette["button_text"]} !important;
-        }}
-        .stButton>button:hover {{
-            background: {palette["button_hover_bg"]} !important;
-        }}
+[data-testid="stFileUploaderDropzone"] * {
+    color: {select_value_color} !important;
+}
 
-        /* Sidebar: compact but readable + high contrast widgets */
-        section[data-testid="stSidebar"] {{
-            background: {sidebar_bg} !important;
-            border-right: 1px solid {sidebar_border} !important;
-        }}
-        section[data-testid="stSidebar"] > div {{
-            padding-top: 0.65rem !important;
-            padding-bottom: 0.85rem !important;
-        }}
-        section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{
-            gap: 0.45rem !important;
-        }}
-        section[data-testid="stSidebar"] label {{
-            margin-bottom: 0.10rem !important;
-        }}
-        section[data-testid="stSidebar"] .stSlider,
-        section[data-testid="stSidebar"] .stSelectbox,
-        section[data-testid="stSidebar"] .stColorPicker,
-        section[data-testid="stSidebar"] .stFileUploader {{
-            margin-top: 0.10rem !important;
-            margin-bottom: 0.20rem !important;
-        }}
-        section[data-testid="stSidebar"] * {{
-            color: {text} !important;
-        }}
-        section[data-testid="stSidebar"] .stCaption,
-        section[data-testid="stSidebar"] .stMarkdown p,
-        section[data-testid="stSidebar"] .stMarkdown li {{
-            color: {muted} !important;
-        }}
+/* Metrics */
+[data-testid="stMetric"] {
+    background: {palette["widget_bg"]};
+    border: 1px solid {palette["border"]};
+    border-radius: 14px;
+    padding: 0.6rem;
+}
 
-        section[data-testid="stSidebar"] div[data-baseweb="select"] > div,
-        section[data-testid="stSidebar"] textarea,
-        section[data-testid="stSidebar"] input:not([type="file"]) {{
-            background: {sidebar_widget_bg} !important;
-            border: 1px solid {sidebar_border} !important;
-            color: {select_value_color} !important;
-            -webkit-text-fill-color: {select_value_color} !important;
-        }}
-        section[data-testid="stSidebar"] div[data-baseweb="select"] span {{
-            color: {select_value_color} !important;
-        }}
-        section[data-testid="stSidebar"] div[data-baseweb="popover"] div[data-baseweb="menu"] {{
-            background: {palette["menu_bg"]} !important;
-            border: 1px solid {sidebar_border} !important;
-        }}
-        section[data-testid="stSidebar"] div[data-baseweb="popover"] div[data-baseweb="menu"] * {{
-            color: {menu_text_color} !important;
-        }}
-        section[data-testid="stSidebar"] div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"]:hover {{
-            background: {sidebar_hover} !important;
-        }}
+/* Buttons */
+button[kind="primary"], button[kind="secondary"], .stButton>button {
+    background: {palette["button_bg"]} !important;
+    border: 1px solid {palette["border"]} !important;
+    color: {palette["button_text"]} !important;
+}
 
-        section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] {{
-            background: {sidebar_widget_bg} !important;
-            border: 1px dashed {sidebar_border} !important;
-        }}
-        section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] * {{
-            color: {select_value_color} !important;
-        }}
+.stButton>button:hover {
+    background: {palette["button_hover_bg"]} !important;
+}
 
-        {icon_css}
-          /* ===============================
-        FORCE WIDGET LABEL READABILITY
-        =============================== */
+/* Sidebar base */
+section[data-testid="stSidebar"] {
+    background: {sidebar_bg} !important;
+    border-right: 1px solid {sidebar_border} !important;
+}
 
-        label[data-testid="stWidgetLabel"] p,
-        label[data-testid="stWidgetLabel"] span,
-        label[data-testid="stWidgetLabel"] div {{
-            color: {label_color} !important;
-            -webkit-text-fill-color: {label_color} !important;
-            opacity: 1 !important;
-        }}
+section[data-testid="stSidebar"] * {
+    color: {text} !important;
+}
 
-        div[data-baseweb="select"] > div *,
-        section[data-testid="stSidebar"] div[data-baseweb="select"] > div * {{
-            color: {select_value_color} !important;
-            -webkit-text-fill-color: {select_value_color} !important;
-            opacity: 1 !important;
-        }}
-
-        div[data-baseweb="popover"] div[data-baseweb="menu"] *,
-        section[data-testid="stSidebar"] div[data-baseweb="popover"] div[data-baseweb="menu"] * {{
-            color: {menu_text_color} !important;
-            -webkit-text-fill-color: {menu_text_color} !important;
-            opacity: 1 !important;
-        }}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+{icon_css}
 
 
 # ---------------------------
