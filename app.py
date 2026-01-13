@@ -400,149 +400,192 @@ def inject_dropdown_scroll_to_selected():
 
 
 # ---------------------------
-# CSS
+# CSS injection (FIXED)
 # ---------------------------
 
-header[data-testid="stHeader"] { background: transparent !important; }
-[data-testid="stDeployButton"], [data-testid="stStatusWidget"], [data-testid="stToolbarActions"] { display:none !important; }
+def apply_css(bg_css: str, palette: dict, text: str, muted: str, sidebar_icon_uri: str | None, dark_mode: bool):
+    # These control colors are used by the CSS selectors below
+    select_value_color = "#e5e7eb" if dark_mode else "#0f172a"
+    select_placeholder_color = "#cbd5e1" if dark_mode else "#334155"
+    menu_text_color = "#e5e7eb" if dark_mode else "#0f172a"
+
+    sidebar_bg = "rgba(2, 6, 23, 0.78)" if dark_mode else "rgba(255, 255, 255, 0.92)"
+    sidebar_border = palette["border"]
+
+    icon_css = ""
+    if sidebar_icon_uri:
+        icon_css = f"""
+        [data-testid="stSidebarCollapsedControl"] button::after,
+        [data-testid="stSidebarCollapseButton"] button::after,
+        button[title="Open sidebar"]::after,
+        button[title="Close sidebar"]::after {{
+            content: "" !important;
+            display: inline-block !important;
+            width: 18px !important;
+            height: 18px !important;
+            margin-left: 8px !important;
+            background-image: url("{sidebar_icon_uri}") !important;
+            background-size: contain !important;
+            background-repeat: no-repeat !important;
+            background-position: center !important;
+            opacity: 0.95 !important;
+        }}
+        """
+
+    # IMPORTANT:
+    # This is an f-string. All literal CSS braces must be doubled: {{ and }}.
+    st.markdown(
+        f"""
+<style>
+header[data-testid="stHeader"] {{ background: transparent !important; }}
+[data-testid="stDeployButton"], [data-testid="stStatusWidget"], [data-testid="stToolbarActions"] {{ display:none !important; }}
 
 html, body, .stApp,
 [data-testid="stAppViewContainer"],
-[data-testid="stAppViewContainer"] > .main {
+[data-testid="stAppViewContainer"] > .main {{
     {bg_css}
-}
+}}
 
-[data-testid="stAppViewContainer"] { background-color: transparent !important; }
-[data-testid="stAppViewContainer"] > .main {
+[data-testid="stAppViewContainer"] {{ background-color: transparent !important; }}
+[data-testid="stAppViewContainer"] > .main {{
     background-color: transparent !important;
     padding-top: 0rem !important;
     padding-bottom: 6.5rem !important;
-}
+}}
 
-.block-container {
+.block-container {{
     background: {palette["card_bg"]};
     border: 1px solid {palette["border"]};
     border-radius: 18px;
     padding: 1.1rem;
     backdrop-filter: blur(8px);
-}
+}}
 
-html, body, [data-testid="stAppViewContainer"] * { color: {text}; }
-.stCaption, .stMarkdown p, .stMarkdown li { color: {muted}; }
+html, body, [data-testid="stAppViewContainer"] * {{ color: {text}; }}
+.stCaption, .stMarkdown p, .stMarkdown li {{ color: {muted}; }}
+
+h1 {{
+    margin: 0 !important;
+    padding: 0 !important;
+    line-height: 1.08 !important;
+}}
+.title-desc-tight p {{
+    margin: 0.12rem 0 0 0 !important;
+    padding: 0 !important;
+}}
 
 /* ===============================
    FORCE WIDGET LABEL READABILITY
    =============================== */
-
-/* Widget labels (above dropdowns, sliders, etc) */
 label[data-testid="stWidgetLabel"] p,
 label[data-testid="stWidgetLabel"] span,
-label[data-testid="stWidgetLabel"] div {
+label[data-testid="stWidgetLabel"] div {{
     color: {text} !important;
     -webkit-text-fill-color: {text} !important;
     opacity: 1 !important;
-}
+}}
 
 /* Selected value inside selectbox control */
 div[data-baseweb="select"] > div *,
-section[data-testid="stSidebar"] div[data-baseweb="select"] > div * {
+section[data-testid="stSidebar"] div[data-baseweb="select"] > div * {{
     color: {select_value_color} !important;
     -webkit-text-fill-color: {select_value_color} !important;
     opacity: 1 !important;
-}
+}}
 
 /* Placeholder text */
 div[data-baseweb="select"] [aria-placeholder="true"],
-div[data-baseweb="select"] [data-baseweb="placeholder"] {
+div[data-baseweb="select"] [data-baseweb="placeholder"] {{
     color: {select_placeholder_color} !important;
     opacity: 1 !important;
-}
+}}
 
 /* Dropdown menu text */
 div[data-baseweb="popover"] div[data-baseweb="menu"],
-section[data-testid="stSidebar"] div[data-baseweb="popover"] div[data-baseweb="menu"] {
+section[data-testid="stSidebar"] div[data-baseweb="popover"] div[data-baseweb="menu"] {{
     background: {palette["menu_bg"]} !important;
     border: 1px solid {palette["border"]} !important;
     border-radius: 12px !important;
-}
+}}
 
 div[data-baseweb="popover"] div[data-baseweb="menu"] *,
-section[data-testid="stSidebar"] div[data-baseweb="popover"] div[data-baseweb="menu"] * {
+section[data-testid="stSidebar"] div[data-baseweb="popover"] div[data-baseweb="menu"] * {{
     color: {menu_text_color} !important;
     opacity: 1 !important;
-}
+}}
 
-div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"]:hover {
+div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"]:hover {{
     background: {palette["hover_bg"]} !important;
-}
+}}
 
 /* Inputs & textareas */
-textarea, input:not([type="file"]) {
+textarea, input:not([type="file"]) {{
     background: {palette["widget_bg"]} !important;
     border: 1px solid {palette["border"]} !important;
     color: {select_value_color} !important;
     -webkit-text-fill-color: {select_value_color} !important;
-}
+}}
 
 /* Focus ring */
-div[data-baseweb="select"] > div:focus-within {
+div[data-baseweb="select"] > div:focus-within {{
     box-shadow: 0 0 0 3px {palette["focus_ring"]} !important;
-}
+}}
 
 /* File uploader */
-[data-testid="stFileUploaderDropzone"] {
+[data-testid="stFileUploaderDropzone"] {{
     background: {palette["widget_bg"]};
     border: 1px dashed {palette["border"]};
     border-radius: 12px;
     padding: 0.65rem !important;
-}
-
-[data-testid="stFileUploaderDropzone"] * {
+}}
+[data-testid="stFileUploaderDropzone"] * {{
     color: {select_value_color} !important;
-}
+}}
 
 /* Metrics */
-[data-testid="stMetric"] {
+[data-testid="stMetric"] {{
     background: {palette["widget_bg"]};
     border: 1px solid {palette["border"]};
     border-radius: 14px;
     padding: 0.6rem;
-}
+}}
 
 /* Buttons */
-button[kind="primary"], button[kind="secondary"], .stButton>button {
+button[kind="primary"], button[kind="secondary"], .stButton>button {{
     background: {palette["button_bg"]} !important;
     border: 1px solid {palette["border"]} !important;
     color: {palette["button_text"]} !important;
-}
-
-.stButton>button:hover {
+}}
+.stButton>button:hover {{
     background: {palette["button_hover_bg"]} !important;
-}
+}}
 
 /* Sidebar base */
-section[data-testid="stSidebar"] {
+section[data-testid="stSidebar"] {{
     background: {sidebar_bg} !important;
     border-right: 1px solid {sidebar_border} !important;
-}
-
-section[data-testid="stSidebar"] * {
+}}
+section[data-testid="stSidebar"] * {{
     color: {text} !important;
-}
+}}
 
 {icon_css}
+</style>
+""",
+        unsafe_allow_html=True,
+    )
 
 
 # ---------------------------
-# Defaults
+# Defaults (UPDATED: default background is Solid Warm Cream)
 # ---------------------------
 
 if "bg_mode" not in st.session_state:
-    st.session_state["bg_mode"] = "Gradient"
+    st.session_state["bg_mode"] = "Solid"
 if "solid_choice" not in st.session_state:
-    st.session_state["solid_choice"] = list(SOLID_PALETTES.keys())[0]
+    st.session_state["solid_choice"] = "Warm Cream"
 if "solid_picker" not in st.session_state:
-    st.session_state["solid_picker"] = SOLID_PALETTES[st.session_state["solid_choice"]]
+    st.session_state["solid_picker"] = SOLID_PALETTES.get(st.session_state["solid_choice"], "#fbf7ef")
 if "grad_a" not in st.session_state:
     st.session_state["grad_a"] = "#0b1020"
 if "grad_b" not in st.session_state:
@@ -554,23 +597,27 @@ if "max_categories_main" not in st.session_state:
 if "max_preview_rows_main" not in st.session_state:
     st.session_state["max_preview_rows_main"] = 25
 
+
 # ---------------------------
 # Sidebar: compact sections via expanders
 # ---------------------------
 
 with st.sidebar:
     with st.expander("Page Appearance", expanded=True):
-        st.selectbox("Background Type", ["Solid", "Gradient", "Image"], index=1, key="bg_mode")
+        bg_type_options = ["Solid", "Gradient", "Image"]
+        bg_index = bg_type_options.index(st.session_state.get("bg_mode", "Solid")) if st.session_state.get("bg_mode", "Solid") in bg_type_options else 0
+        st.selectbox("Background Type", bg_type_options, index=bg_index, key="bg_mode")
 
         if st.session_state["bg_mode"] == "Solid":
-            # Solid Color selector moved ABOVE palette dropdown
-            st.color_picker("Solid Color", value=st.session_state.get("solid_picker", "#0f172a"), key="solid_picker")
+            st.color_picker("Solid Color", value=st.session_state.get("solid_picker", "#fbf7ef"), key="solid_picker")
+
+            keys = list(SOLID_PALETTES.keys())
+            current = st.session_state.get("solid_choice", "Warm Cream")
+            idx = keys.index(current) if current in keys else 0
             st.selectbox(
                 "Solid Palette",
-                list(SOLID_PALETTES.keys()),
-                index=list(SOLID_PALETTES.keys()).index(
-                    st.session_state.get("solid_choice", list(SOLID_PALETTES.keys())[0])
-                ),
+                keys,
+                index=idx,
                 key="solid_choice",
                 on_change=_sync_solid_picker,
             )
@@ -603,13 +650,14 @@ with st.sidebar:
             unsafe_allow_html=True,
         )
 
+
 # ---------------------------
 # Theme construction
 # ---------------------------
 
-bg_mode = st.session_state.get("bg_mode", "Gradient")
+bg_mode = st.session_state.get("bg_mode", "Solid")
 img_upload = st.session_state.get("bg_image", None)
-solid_picker = st.session_state.get("solid_picker", "#0f172a")
+solid_picker = st.session_state.get("solid_picker", "#fbf7ef")
 grad_a = st.session_state.get("grad_a", "#0b1020")
 grad_b = st.session_state.get("grad_b", "#123055")
 grad_angle = st.session_state.get("grad_angle", 135)
@@ -687,6 +735,7 @@ theme = {
     "colorscale": colorscale(sh),
 }
 
+
 # ---------------------------
 # Title + description
 # ---------------------------
@@ -702,11 +751,12 @@ st.markdown(
     [Key Statistics](#key-statistics) ·
     [Radial Breakdown](#radial-breakdown) ·
     [Export](#export)
-    """
+    """,
+    unsafe_allow_html=True,
 )
 
-# Standard section spacing amount (same padding before each main section)
 SECTION_PAD = "<div style='height: 1.25rem;'></div>"
+
 
 # ---------------------------
 # Upload + preview
@@ -721,6 +771,7 @@ with left_upload:
 
 preview_clicked = False
 preview_dialog = None
+
 if file_top is not None:
     try:
         @st.dialog("Dataset Preview")
@@ -748,6 +799,7 @@ if preview_dialog is not None and preview_clicked:
 
 numeric_cols = df.select_dtypes(include="number").columns.tolist()
 categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
+
 
 # ---------------------------
 # Key Statistics
@@ -811,6 +863,7 @@ meta_cols[1].metric("Numeric Columns", int(len(numeric_cols)))
 meta_cols[2].metric("Categorical Columns", int(len(categorical_cols)))
 meta_cols[3].metric("Missing Cells", int(df.isna().sum().sum()))
 
+
 # ---------------------------
 # Radial chart
 # ---------------------------
@@ -871,8 +924,9 @@ with rad_chart:
     else:
         st.info("Add a categorical column to see the radial chart.")
 
+
 # ---------------------------
-# Tabs (apply same padding above tabs as above Key Statistics)
+# Tabs
 # ---------------------------
 
 st.markdown(SECTION_PAD, unsafe_allow_html=True)
