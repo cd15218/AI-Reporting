@@ -542,6 +542,47 @@ div[data-baseweb="popover"] div[data-baseweb="menu"] * {{
     opacity: 1 !important;
 }}
 
+/* ===============================
+   FIX SIDEBAR DROPDOWN LIST READABILITY (PORTAL MENUS)
+   =============================== */
+
+/* The dropdown list is rendered in a portal, not inside the sidebar.
+   Force menu background + item text with higher specificity. */
+div[data-baseweb="popover"] div[data-baseweb="menu"],
+div[data-baseweb="popover"] div[role="listbox"] {{
+    background: {palette["menu_bg"]} !important;
+    border: 1px solid {palette["border"]} !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+}}
+
+/* Force option text to be readable (Streamlit sometimes lowers opacity) */
+div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"],
+div[data-baseweb="popover"] div[role="listbox"] div[role="option"] {{
+    color: {menu_text_color} !important;
+    -webkit-text-fill-color: {menu_text_color} !important;
+    opacity: 1 !important;
+}}
+
+/* Most option labels are spans inside the option row */
+div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"] span,
+div[data-baseweb="popover"] div[role="listbox"] div[role="option"] span {{
+    color: {menu_text_color} !important;
+    -webkit-text-fill-color: {menu_text_color} !important;
+    opacity: 1 !important;
+}}
+
+/* Hover + selected states (keep readable on both light/dark menus) */
+div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"]:hover,
+div[data-baseweb="popover"] div[role="listbox"] div[role="option"]:hover {{
+    background: {palette["hover_bg"]} !important;
+}}
+
+div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"][aria-selected="true"],
+div[data-baseweb="popover"] div[role="listbox"] div[role="option"][aria-selected="true"] {{
+    background: {palette["hover_bg"]} !important;
+}}
+
 /* Hover state */
 div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"]:hover {{
     background: {palette["hover_bg"]} !important;
