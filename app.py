@@ -528,7 +528,7 @@ div[data-baseweb="select"] svg * {{
     opacity: 0.95 !important;
 }}
 
-/* Dropdown menu (fixed readability + no white rows) */
+/* Dropdown menu (REPLACEMENT: prevents white rows from BaseWeb inner wrappers) */
 [data-baseweb="popover"] [data-baseweb="menu"],
 [data-baseweb="popover"] [role="listbox"],
 [data-baseweb="popover"] ul {{
@@ -539,34 +539,55 @@ div[data-baseweb="select"] svg * {{
     overflow: hidden !important;
 }}
 
-/* Menu rows */
+/* Force ALL direct children of the menu to not be white */
+[data-baseweb="popover"] [data-baseweb="menu"] > div,
+[data-baseweb="popover"] [role="listbox"] > div,
+[data-baseweb="popover"] ul > li {{
+    background: {palette["widget_bg"]} !important;
+    background-color: {palette["widget_bg"]} !important;
+}}
+
+/* Option rows */
 [data-baseweb="popover"] [role="option"],
 [data-baseweb="popover"] li {{
     background: {palette["widget_bg"]} !important;
+    background-color: {palette["widget_bg"]} !important;
     color: {menu_text_color} !important;
     -webkit-text-fill-color: {menu_text_color} !important;
     opacity: 1 !important;
 }}
 
-/* Inner text + labels */
+/* BaseWeb often wraps option content in extra divs/spans that keep a white bg.
+   This forces those wrappers transparent so the themed row bg shows through. */
+[data-baseweb="popover"] [role="option"] > div,
+[data-baseweb="popover"] [role="option"] > div > div,
+[data-baseweb="popover"] li > div,
+[data-baseweb="popover"] li > div > div {{
+    background: transparent !important;
+    background-color: transparent !important;
+}}
+
+/* All option text */
 [data-baseweb="popover"] [role="option"] *,
 [data-baseweb="popover"] li * {{
     color: {menu_text_color} !important;
     -webkit-text-fill-color: {menu_text_color} !important;
     opacity: 1 !important;
-    background-color: transparent !important;
 }}
 
 /* Hover */
 [data-baseweb="popover"] [role="option"]:hover,
 [data-baseweb="popover"] li:hover {{
     background: {palette["hover_bg"]} !important;
+    background-color: {palette["hover_bg"]} !important;
 }}
 
-/* Selected item */
+/* Selected */
 [data-baseweb="popover"] [role="option"][aria-selected="true"],
+[data-baseweb="popover"] [role="option"][data-selected="true"],
 [data-baseweb="popover"] li[aria-selected="true"] {{
     background: {palette["hover_bg"]} !important;
+    background-color: {palette["hover_bg"]} !important;
 }}
 
 /* Icons */
@@ -574,6 +595,7 @@ div[data-baseweb="select"] svg * {{
 [data-baseweb="popover"] svg * {{
     fill: {menu_text_color} !important;
     stroke: {menu_text_color} !important;
+    opacity: 1 !important;
 }}
 
 /* ===============================
