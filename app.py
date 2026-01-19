@@ -404,14 +404,16 @@ def inject_dropdown_scroll_to_selected():
 # ---------------------------
 
 def apply_css(bg_css: str, palette: dict, text: str, muted: str, sidebar_icon_uri: str | None, dark_mode: bool):
-    # These control colors are used by the CSS selectors below
-    select_value_color = "#e5e7eb" if dark_mode else "#0f172a"
-    select_placeholder_color = "#cbd5e1" if dark_mode else "#334155"
-    menu_text_color = "#e5e7eb" if dark_mode else "#0f172a"
+    # Use the computed page colors as the single source of truth
+    select_value_color = text
+    select_placeholder_color = muted
+    menu_text_color = text
 
+    # Sidebar surface
     sidebar_bg = "rgba(2, 6, 23, 0.78)" if dark_mode else "rgba(255, 255, 255, 0.92)"
     sidebar_border = palette["border"]
 
+    # Optional icon on sidebar toggle
     icon_css = ""
     if sidebar_icon_uri:
         icon_css = f"""
@@ -432,14 +434,14 @@ def apply_css(bg_css: str, palette: dict, text: str, muted: str, sidebar_icon_ur
         }}
         """
 
-    # IMPORTANT:
-    # This is an f-string. All literal CSS braces must be doubled: {{ and }}.
     st.markdown(
         f"""
 <style>
+/* Hide top widgets you don’t want */
 header[data-testid="stHeader"] {{ background: transparent !important; }}
 [data-testid="stDeployButton"], [data-testid="stStatusWidget"], [data-testid="stToolbarActions"] {{ display:none !important; }}
 
+/* Page background */
 html, body, .stApp,
 [data-testid="stAppViewContainer"],
 [data-testid="stAppViewContainer"] > .main {{
@@ -453,6 +455,7 @@ html, body, .stApp,
     padding-bottom: 6.5rem !important;
 }}
 
+/* Main content surface */
 .block-container {{
     background: {palette["card_bg"]};
     border: 1px solid {palette["border"]};
@@ -461,9 +464,17 @@ html, body, .stApp,
     backdrop-filter: blur(8px);
 }}
 
-html, body, [data-testid="stAppViewContainer"] * {{ color: {text}; }}
-.stCaption, .stMarkdown p, .stMarkdown li {{ color: {muted}; }}
+/* Default text everywhere */
+html, body, [data-testid="stAppViewContainer"] * {{
+    color: {text} !important;
+    -webkit-text-fill-color: {text} !important;
+}}
+.stCaption, .stMarkdown p, .stMarkdown li {{
+    color: {muted} !important;
+    -webkit-text-fill-color: {muted} !important;
+}}
 
+/* Title spacing */
 h1 {{
     margin: 0 !important;
     padding: 0 !important;
@@ -475,8 +486,10 @@ h1 {{
 }}
 
 /* ===============================
-   FORCE WIDGET LABEL READABILITY
+   FORCE WIDGET TEXT READABILITY
    =============================== */
+
+/* Widget labels */
 label[data-testid="stWidgetLabel"] p,
 label[data-testid="stWidgetLabel"] span,
 label[data-testid="stWidgetLabel"] div {{
@@ -485,41 +498,64 @@ label[data-testid="stWidgetLabel"] div {{
     opacity: 1 !important;
 }}
 
-/* Selected value inside selectbox control */
-div[data-baseweb="select"] > div *,
-section[data-testid="stSidebar"] div[data-baseweb="select"] > div * {{
+/* Selectbox / Multiselect control surface */
+div[data-baseweb="select"] > div {{
+    background: {palette["widget_bg"]} !important;
+    border: 1px solid {palette["border"]} !important;
+    border-radius: 12px !important;
+}}
+
+/* Selected value inside control (this is the big one) */
+div[data-baseweb="select"] > div * {{
     color: {select_value_color} !important;
     -webkit-text-fill-color: {select_value_color} !important;
     opacity: 1 !important;
 }}
 
-/* Placeholder text */
+/* Placeholder text inside control */
 div[data-baseweb="select"] [aria-placeholder="true"],
 div[data-baseweb="select"] [data-baseweb="placeholder"] {{
     color: {select_placeholder_color} !important;
+    -webkit-text-fill-color: {select_placeholder_color} !important;
     opacity: 1 !important;
 }}
 
-/* Dropdown menu text */
-div[data-baseweb="popover"] div[data-baseweb="menu"],
-section[data-testid="stSidebar"] div[data-baseweb="popover"] div[data-baseweb="menu"] {{
+/* Dropdown arrow / chevrons (SVG) */
+div[data-baseweb="select"] svg,
+div[data-baseweb="select"] svg * {{
+    fill: {select_value_color} !important;
+    stroke: {select_value_color} !important;
+    opacity: 0.95 !important;
+}}
+
+/* Dropdown menu container */
+div[data-baseweb="popover"] div[data-baseweb="menu"] {{
     background: {palette["menu_bg"]} !important;
     border: 1px solid {palette["border"]} !important;
     border-radius: 12px !important;
 }}
 
-div[data-baseweb="popover"] div[data-baseweb="menu"] *,
-section[data-testid="stSidebar"] div[data-baseweb="popover"] div[data-baseweb="menu"] * {{
+/* Dropdown menu text (options) */
+div[data-baseweb="popover"] div[data-baseweb="menu"] * {{
     color: {menu_text_color} !important;
+    -webkit-text-fill-color: {menu_text_color} !important;
     opacity: 1 !important;
 }}
 
+/* Hover state */
 div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"]:hover {{
     background: {palette["hover_bg"]} !important;
 }}
 
+/* Selected option state (keeps it readable even if BaseWeb changes it) */
+div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"][aria-selected="true"],
+div[data-baseweb="popover"] div[data-baseweb="menu"] div[role="option"][data-selected="true"] {{
+    background: {palette["hover_bg"]} !important;
+}}
+
 /* Inputs & textareas */
-textarea, input:not([type="file"]) {{
+textarea,
+input:not([type="file"]) {{
     background: {palette["widget_bg"]} !important;
     border: 1px solid {palette["border"]} !important;
     color: {select_value_color} !important;
@@ -533,21 +569,38 @@ div[data-baseweb="select"] > div:focus-within {{
 
 /* File uploader */
 [data-testid="stFileUploaderDropzone"] {{
-    background: {palette["widget_bg"]};
-    border: 1px dashed {palette["border"]};
-    border-radius: 12px;
+    background: {palette["widget_bg"]} !important;
+    border: 1px dashed {palette["border"]} !important;
+    border-radius: 12px !important;
     padding: 0.65rem !important;
 }}
 [data-testid="stFileUploaderDropzone"] * {{
     color: {select_value_color} !important;
+    -webkit-text-fill-color: {select_value_color} !important;
 }}
 
 /* Metrics */
 [data-testid="stMetric"] {{
-    background: {palette["widget_bg"]};
-    border: 1px solid {palette["border"]};
-    border-radius: 14px;
-    padding: 0.6rem;
+    background: {palette["widget_bg"]} !important;
+    border: 1px solid {palette["border"]} !important;
+    border-radius: 14px !important;
+    padding: 0.6rem !important;
+}}
+[data-testid="stMetric"] * {{
+    color: {text} !important;
+    -webkit-text-fill-color: {text} !important;
+}}
+
+/* Tabs text */
+button[data-baseweb="tab"] * {{
+    color: {text} !important;
+    -webkit-text-fill-color: {text} !important;
+}}
+
+/* Dataframe text */
+[data-testid="stDataFrame"] * {{
+    color: {text} !important;
+    -webkit-text-fill-color: {text} !important;
 }}
 
 /* Buttons */
@@ -555,6 +608,7 @@ button[kind="primary"], button[kind="secondary"], .stButton>button {{
     background: {palette["button_bg"]} !important;
     border: 1px solid {palette["border"]} !important;
     color: {palette["button_text"]} !important;
+    -webkit-text-fill-color: {palette["button_text"]} !important;
 }}
 .stButton>button:hover {{
     background: {palette["button_hover_bg"]} !important;
@@ -567,6 +621,16 @@ section[data-testid="stSidebar"] {{
 }}
 section[data-testid="stSidebar"] * {{
     color: {text} !important;
+    -webkit-text-fill-color: {text} !important;
+}}
+
+/* Sidebar select controls should match */
+section[data-testid="stSidebar"] div[data-baseweb="select"] > div {{
+    background: {palette["widget_bg"]} !important;
+    border: 1px solid {sidebar_border} !important;
+}}
+section[data-testid="stSidebar"] div[data-baseweb="popover"] div[data-baseweb="menu"] {{
+    border: 1px solid {sidebar_border} !important;
 }}
 
 {icon_css}
