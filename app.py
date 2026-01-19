@@ -535,10 +535,48 @@ div[data-baseweb="popover"] div[data-baseweb="menu"] {{
     border-radius: 12px !important;
 }}
 
-/* Dropdown menu text (options) */
-div[data-baseweb="popover"] div[data-baseweb="menu"] * {{
+/* Dropdown menu text (REPLACEMENT: handles BaseWeb portal + listbox/ul variants) */
+[data-baseweb="popover"] [data-baseweb="menu"],
+[data-baseweb="popover"] [role="listbox"],
+[data-baseweb="popover"] ul {{
+    background: {palette["menu_bg"]} !important;
+    background-color: {palette["menu_bg"]} !important;
+    border: 1px solid {palette["border"]} !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+}}
+
+/* Force option text readable (covers div/li/span descendants) */
+[data-baseweb="popover"] [role="option"],
+[data-baseweb="popover"] li {{
     color: {menu_text_color} !important;
     -webkit-text-fill-color: {menu_text_color} !important;
+    opacity: 1 !important;
+}}
+[data-baseweb="popover"] [role="option"] *,
+[data-baseweb="popover"] li *,
+[data-baseweb="popover"] [role="listbox"] * {{
+    color: {menu_text_color} !important;
+    -webkit-text-fill-color: {menu_text_color} !important;
+    opacity: 1 !important;
+}}
+
+/* Hover + selected states */
+[data-baseweb="popover"] [role="option"]:hover,
+[data-baseweb="popover"] li:hover {{
+    background: {palette["hover_bg"]} !important;
+}}
+[data-baseweb="popover"] [role="option"][aria-selected="true"],
+[data-baseweb="popover"] [role="option"][data-selected="true"],
+[data-baseweb="popover"] li[aria-selected="true"] {{
+    background: {palette["hover_bg"]} !important;
+}}
+
+/* Menu icons/checkmarks */
+[data-baseweb="popover"] svg,
+[data-baseweb="popover"] svg * {{
+    fill: {menu_text_color} !important;
+    stroke: {menu_text_color} !important;
     opacity: 1 !important;
 }}
 
