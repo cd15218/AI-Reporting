@@ -531,82 +531,49 @@ div[data-baseweb="select"] svg * {{
 /* Dropdown menu (fixed readability + no white rows) */
 [data-baseweb="popover"] [data-baseweb="menu"],
 [data-baseweb="popover"] [role="listbox"],
-[data-baseweb="popover"] ul {
+[data-baseweb="popover"] ul {{
     background: {palette["menu_bg"]} !important;
     background-color: {palette["menu_bg"]} !important;
     border: 1px solid {palette["border"]} !important;
     border-radius: 12px !important;
     overflow: hidden !important;
-}
+}}
 
 /* Menu rows */
 [data-baseweb="popover"] [role="option"],
-[data-baseweb="popover"] li {
+[data-baseweb="popover"] li {{
     background: {palette["widget_bg"]} !important;
     color: {menu_text_color} !important;
     -webkit-text-fill-color: {menu_text_color} !important;
     opacity: 1 !important;
-}
+}}
 
 /* Inner text + labels */
 [data-baseweb="popover"] [role="option"] *,
-[data-baseweb="popover"] li * {
+[data-baseweb="popover"] li * {{
     color: {menu_text_color} !important;
     -webkit-text-fill-color: {menu_text_color} !important;
     opacity: 1 !important;
     background-color: transparent !important;
-}
+}}
 
 /* Hover */
-[data-baseweb="popover"] [role="option"]:hover,
-[data-baseweb="popover"] li:hover {
-    background: {palette["hover_bg"]} !important;
-}
-
-/* Selected item */
-[data-baseweb="popover"] [role="option"][aria-selected="true"],
-[data-baseweb="popover"] li[aria-selected="true"] {
-    background: {palette["hover_bg"]} !important;
-}
-
-/* Icons */
-[data-baseweb="popover"] svg,
-[data-baseweb="popover"] svg * {
-    fill: {menu_text_color} !important;
-    stroke: {menu_text_color} !important;
-}
-/* Force option text readable (covers div/li/span descendants) */
-[data-baseweb="popover"] [role="option"],
-[data-baseweb="popover"] li {{
-    color: {menu_text_color} !important;
-    -webkit-text-fill-color: {menu_text_color} !important;
-    opacity: 1 !important;
-}}
-[data-baseweb="popover"] [role="option"] *,
-[data-baseweb="popover"] li *,
-[data-baseweb="popover"] [role="listbox"] * {{
-    color: {menu_text_color} !important;
-    -webkit-text-fill-color: {menu_text_color} !important;
-    opacity: 1 !important;
-}}
-
-/* Hover + selected states */
 [data-baseweb="popover"] [role="option"]:hover,
 [data-baseweb="popover"] li:hover {{
     background: {palette["hover_bg"]} !important;
 }}
+
+/* Selected item */
 [data-baseweb="popover"] [role="option"][aria-selected="true"],
-[data-baseweb="popover"] [role="option"][data-selected="true"],
 [data-baseweb="popover"] li[aria-selected="true"] {{
     background: {palette["hover_bg"]} !important;
 }}
 
-/* Menu icons/checkmarks */
+/* Icons */
 [data-baseweb="popover"] svg,
 [data-baseweb="popover"] svg * {{
     fill: {menu_text_color} !important;
     stroke: {menu_text_color} !important;
-    opacity: 1 !important;
 }}
 
 /* ===============================
