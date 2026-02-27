@@ -17,12 +17,23 @@ def get_dominant_color(uploaded_image):
     dominant_color = img.getpixel((0, 0))
     return '#{:02x}{:02x}{:02x}'.format(*dominant_color)
 
+def get_contrast_color(hex_color):
+    """Determines if white or black text has better contrast against a hex color."""
+    hex_color = hex_color.lstrip('#')
+    r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    # Relative luminance formula
+    luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+    return "#000000" if luminance > 0.5 else "#FFFFFF"
+
 def apply_auto_scenery_style(b64_str, img_type, auto_color):
-    """Isolates imagery to main page and locks the sidebar theme."""
+    """Applies styles with dynamic text coloring and NO shadows."""
+    # Determine contrast for the main page content based on the dominant image color
+    main_contrast = get_contrast_color(auto_color)
+    
     st.markdown(
         f"""
         <style>
-        /* 1. Main Page Background ONLY */
+        /* 1. Main Page Background */
         [data-testid="stAppViewContainer"] {{
             background-image: url("data:{img_type};base64,{b64_str}");
             background-size: cover;
@@ -34,48 +45,53 @@ def apply_auto_scenery_style(b64_str, img_type, auto_color):
             background: transparent !important;
         }}
         
-        /* 2. Sidebar: HARDCODED SOLID THEME (Does not change) */
+        /* 2. Sidebar: Isolated Dark Theme */
         [data-testid="stSidebar"] {{
-            background-color: #262730 !important; /* Standard dark slate */
+            background-color: #262730 !important;
             background-image: none !important;
         }}
         
-        /* Ensure sidebar text and buttons are always white/legible */
+        /* Force Sidebar Text & 'Browse Files' visibility */
         [data-testid="stSidebar"] *, 
         [data-testid="stSidebar"] p, 
         [data-testid="stSidebar"] label,
-        [data-testid="stSidebar"] button p {{
+        [data-testid="stSidebar"] button p,
+        [data-testid="stSidebar"] button div div small {{
             color: #FFFFFF !important;
-            font-weight: 600 !important;
+            font-weight: 700 !important;
+            text-shadow: none !important;
         }}
 
-        /* 3. Data Narrative Title: FORCED TO WHITE WITH GLOW */
+        /* 3. Main Title: Dynamic Color Flip (No Shadows) */
         [data-testid="stHeader"] h1, .main h1 {{
-            color: #FFFFFF !important;
-            text-shadow: 0px 0px 15px rgba(0,0,0,1), 2px 2px 10px rgba(0,0,0,1) !important;
+            color: {main_contrast} !important;
             font-weight: 800 !important;
             font-size: 4rem !important;
+            text-shadow: none !important;
         }}
         
-        /* 4. Global Main Page Text visibility */
+        /* 4. General Main Page Text: Dynamic Color Flip */
         .main p, .main label, .main span, summary, h2, h3 {{
-            color: white !important;
-            text-shadow: 2px 2px 10px rgba(0,0,0,1) !important;
+            color: {main_contrast} !important;
+            font-weight: 700 !important;
+            text-shadow: none !important;
         }}
         
         /* 5. Chart Glassmorphism Container */
         [data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart) {{
-            background: rgba(15, 23, 42, 0.8) !important; 
-            backdrop-filter: blur(30px) !important;
+            background: rgba(15, 23, 42, 0.85) !important; 
+            backdrop-filter: blur(35px) !important;
             border-radius: 28px !important;
             border: 1px solid rgba(255, 255, 255, 0.2) !important;
             padding: 40px !important;
         }}
 
-        /* 6. Icon/Expander Fixes */
-        svg {{ fill: white !important; }}
+        /* 6. Icon/Expander Visibility */
+        svg {{ fill: {main_contrast} !important; }}
+        [data-testid="stSidebar"] svg {{ fill: white !important; }}
+
         details {{
-            background: rgba(0, 0, 0, 0.6) !important;
+            background: rgba(255, 255, 255, 0.1) !important;
             border-radius: 12px !important;
             padding: 10px !important;
         }}
@@ -116,12 +132,12 @@ with st.sidebar:
 
 if bg_image:
     try:
-        # Detect auto-color for chart accents only
+        # Detect auto-color
         auto_theme_color = get_dominant_color(bg_image)
         bg_image.seek(0)
         img_b64 = base64.b64encode(bg_image.getvalue()).decode("utf-8")
         
-        # Apply styles with sidebar and title fixes
+        # Apply styles with color-flipping and no shadows
         apply_auto_scenery_style(img_b64, bg_image.type, auto_theme_color)
     except Exception as e:
         st.error(f"UI Error: {e}")
@@ -132,7 +148,6 @@ else:
 if data_file:
     try:
         df = pd.read_csv(data_file) if data_file.name.endswith('.csv') else pd.read_excel(data_file)
-        
         cols = df.columns
         if len(cols) >= 2:
             plot_df = df.copy()
@@ -142,7 +157,7 @@ if data_file:
 
             st.title("Data Narrative")
             
-            fig = px.area(plot_df, x=cols[0], y=cols[1], title=f"Trend Analysis: {cols[1]}")
+            fig = px.area(plot_df, x=cols[0], y=cols[1], title=f"Trend: {cols[1]}")
             fig.update_traces(
                 line_color=auto_theme_color, 
                 fillcolor=hex_to_rgba(auto_theme_color, 0.45), 
@@ -155,9 +170,9 @@ if data_file:
             with st.expander("Explore Raw Data"):
                 st.dataframe(df)
         else:
-            st.warning("Upload a dataset with at least two columns.")
+            st.warning("Please upload a dataset with at least two columns.")
             
     except Exception as e:
-        st.error(f"Data Error: {e}")
+        st.error(f"Data processing error: {e}")
 else:
     st.info("Upload your background and dataset to begin.")
