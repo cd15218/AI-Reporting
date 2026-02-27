@@ -25,16 +25,15 @@ def get_contrast_color(hex_color):
     return "#000000" if luminance > 0.5 else "#FFFFFF"
 
 def apply_auto_scenery_style(b64_str, img_type, auto_color):
-    """Applies isolated styling for page background vs sidebar."""
+    """Applies styling without the dark overlay."""
     contrast_text = get_contrast_color(auto_color)
     
     st.markdown(
         f"""
         <style>
-        /* 1. Main Page Background ONLY */
+        /* 1. Page Background (No Overlay) */
         [data-testid="stAppViewContainer"] {{
-            background: linear-gradient(rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0.45)), 
-                        url("data:{img_type};base64,{b64_str}");
+            background-image: url("data:{img_type};base64,{b64_str}");
             background-size: cover;
             background-attachment: fixed;
             background-position: center;
@@ -44,7 +43,7 @@ def apply_auto_scenery_style(b64_str, img_type, auto_color):
             background: transparent !important;
         }}
         
-        /* 2. Sidebar: Background color only, no image bleed */
+        /* 2. Sidebar Isolation */
         [data-testid="stSidebar"] {{
             background-color: {auto_color} !important;
             backdrop-filter: blur(20px);
@@ -56,28 +55,37 @@ def apply_auto_scenery_style(b64_str, img_type, auto_color):
             font-weight: 700 !important;
         }}
 
-        /* 3. Global Text Visibility */
-        .main *, .main p, .main label, .main span, summary {{
+        /* 3. Main Title: Sync with Auto Color */
+        .main h1 {{
+            color: {auto_color} !important;
+            /* Heavy shadow to protect readability without the overlay */
+            text-shadow: 0px 0px 15px rgba(0,0,0,0.9), 2px 2px 5px rgba(0,0,0,1) !important;
+            font-weight: 800 !important;
+            font-size: 3.5rem !important;
+        }}
+        
+        /* General Page Text: White with Heavy Shadow */
+        .main p, .main label, .main span, summary, .main h2, .main h3 {{
             color: white !important;
-            text-shadow: 2px 2px 12px rgba(0,0,0,1) !important;
+            text-shadow: 0px 0px 12px rgba(0,0,0,1), 2px 2px 4px rgba(0,0,0,1) !important;
             font-weight: 700 !important;
         }}
         
-        /* 4. Chart Glassmorphism Container */
+        /* 4. Chart Glassmorphism (Slightly darker for contrast) */
         [data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart) {{
-            background: rgba(15, 23, 42, 0.75) !important; 
-            backdrop-filter: blur(30px) !important;
+            background: rgba(15, 23, 42, 0.85) !important; 
+            backdrop-filter: blur(35px) !important;
             border-radius: 28px !important;
             border: 1px solid rgba(255, 255, 255, 0.2) !important;
             padding: 40px !important;
         }}
 
-        /* 5. Icon/Expander Fixes */
+        /* 5. Icons & Expanders */
         svg {{ fill: white !important; }}
         [data-testid="stSidebar"] svg {{ fill: {contrast_text} !important; }}
 
         details {{
-            background: rgba(0, 0, 0, 0.5) !important;
+            background: rgba(0, 0, 0, 0.6) !important;
             border-radius: 12px !important;
             padding: 10px !important;
         }}
@@ -87,7 +95,7 @@ def apply_auto_scenery_style(b64_str, img_type, auto_color):
     )
 
 def make_fig_readable(fig):
-    """Standardizes Plotly fonts for high-contrast visibility. Fixed dict error."""
+    """Syncs Plotly with high-contrast text requirements."""
     fig.update_layout(
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
@@ -99,7 +107,7 @@ def make_fig_readable(fig):
         },
         font=dict(color="white", size=14),
         xaxis=dict(showgrid=False, tickfont=dict(color="white"), title_font=dict(color="white")),
-        yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.15)', tickfont=dict(color="white")),
+        yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.2)', tickfont=dict(color="white")),
         margin=dict(t=100, b=50)
     )
     return fig
@@ -123,29 +131,19 @@ with st.sidebar:
 
 if bg_image:
     try:
-        # Detect palette color
         auto_theme_color = get_dominant_color(bg_image)
-        
-        # Prepare background
         bg_image.seek(0)
         img_b64 = base64.b64encode(bg_image.getvalue()).decode("utf-8")
-        
-        # Apply styles
         apply_auto_scenery_style(img_b64, bg_image.type, auto_theme_color)
     except Exception as e:
-        st.error(f"UI Enhancement Error: {e}")
+        st.error(f"Aesthetic Processing Error: {e}")
 else:
     auto_theme_color = "#00F2FF"
     st.markdown("<style>.stApp {background: #0f172a;}</style>", unsafe_allow_html=True)
 
 if data_file:
     try:
-        # File loading logic
-        if data_file.name.endswith('.csv'):
-            df = pd.read_csv(data_file)
-        else:
-            df = pd.read_excel(data_file)
-        
+        df = pd.read_csv(data_file) if data_file.name.endswith('.csv') else pd.read_excel(data_file)
         cols = df.columns
         if len(cols) >= 2:
             plot_df = df.copy()
@@ -155,8 +153,7 @@ if data_file:
 
             st.title("Data Narrative")
             
-            # Area chart
-            fig = px.area(plot_df, x=cols[0], y=cols[1], title=f"Trend: {cols[1]}")
+            fig = px.area(plot_df, x=cols[0], y=cols[1], title=f"Trend Analysis: {cols[1]}")
             fig.update_traces(
                 line_color=auto_theme_color, 
                 fillcolor=hex_to_rgba(auto_theme_color, 0.45), 
