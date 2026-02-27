@@ -9,29 +9,31 @@ import io
 # COLOR & PALETTE LOGIC
 # ---------------------------
 
-def get_dominant_palette(uploaded_image):
-    """Extracts the most dominant color to use as the theme's primary accent."""
+def get_dominant_color(uploaded_image):
+    """Extracts the dominant color for the graph/chart ONLY."""
     uploaded_image.seek(0)
     img = Image.open(uploaded_image).convert('RGB')
-    # Resize to 1x1 to average the image colors
     img = img.resize((1, 1), resample=Image.Resampling.BILINEAR)
-    dominant = img.getpixel((0, 0))
-    return '#{:02x}{:02x}{:02x}'.format(*dominant)
+    dominant_color = img.getpixel((0, 0))
+    return '#{:02x}{:02x}{:02x}'.format(*dominant_color)
 
-def apply_dynamic_theme(b64_str, img_type, theme_color):
-    """Redefines Streamlit core variables and forces visibility on all widgets."""
+def get_readability_color(hex_color):
+    """Determines if the main page text should be Black or White."""
+    hex_color = hex_color.lstrip('#')
+    r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    # Standard accessibility luminance formula
+    luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+    return "#000000" if luminance > 0.5 else "#FFFFFF"
+
+def apply_final_styling(b64_str, img_type, auto_accent):
+    """Applies isolated sidebar styling and dynamic main page text."""
+    # This color only affects the main page text
+    main_text_color = get_readability_color(auto_accent)
+    
     st.markdown(
         f"""
         <style>
-        /* 1. Global Variable Redefinition - Forces High Contrast */
-        :root {{
-            --primary-color: {theme_color};
-            --background-color: #0E1117;
-            --secondary-background-color: #262730;
-            --text-color: #FFFFFF;
-        }}
-
-        /* 2. Isolated Page Background */
+        /* 1. Main Page Background */
         [data-testid="stAppViewContainer"] {{
             background-image: url("data:{img_type};base64,{b64_str}");
             background-size: cover;
@@ -42,46 +44,69 @@ def apply_dynamic_theme(b64_str, img_type, theme_color):
         [data-testid="stHeader"], [data-testid="stMain"] {{
             background: transparent !important;
         }}
-
-        /* 3. Sidebar Visibility Fix (Forces white text on ALL components) */
+        
+        /* 2. Sidebar: LOCKED DARK THEME (Never changes) */
         [data-testid="stSidebar"] {{
             background-color: #0E1117 !important;
-            border-right: 1px solid rgba(255,255,255,0.1);
+            background-image: none !important;
         }}
         
-        /* Targets the 'Browse files' button text and all sidebar labels */
+        /* Force Sidebar Visibility - FIXED Browse Files */
         [data-testid="stSidebar"] *, 
         [data-testid="stSidebar"] label, 
         [data-testid="stSidebar"] p,
         [data-testid="stSidebar"] small {{
             color: #FFFFFF !important;
             font-weight: 700 !important;
-            opacity: 1 !important;
+            text-shadow: none !important;
         }}
 
-        /* 4. Title Ribbon - Solves the 'Data Narrative' readability issue */
+        /* 3. Main Page Text: Automatic Flip (Black/White) */
         .title-box {{
-            background: rgba(0, 0, 0, 0.7);
+            background: rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(15px);
             padding: 10px 30px;
             border-radius: 12px;
             display: inline-block;
-            border-left: 6px solid {theme_color};
             margin-bottom: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }}
+        
+        /* Specifically targeting 'Data Narrative' and main labels */
+        h1, h2, h3, .main p, .main label, .main span, summary {{
+            color: {main_text_color} !important;
+            text-shadow: none !important;
+            font-weight: 700 !important;
         }}
 
-        /* 5. Chart Container Glassmorphism */
+        /* 4. Chart Glassmorphism Container */
         [data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart) {{
-            background: rgba(15, 23, 42, 0.9) !important; 
+            background: rgba(15, 23, 42, 0.85) !important; 
             backdrop-filter: blur(35px) !important;
             border-radius: 24px !important;
             padding: 40px !important;
             border: 1px solid rgba(255, 255, 255, 0.1) !important;
         }}
+        
+        /* 5. Icon Visibility Sync */
+        svg {{ fill: {main_text_color} !important; }}
+        [data-testid="stSidebar"] svg {{ fill: #FFFFFF !important; }}
         </style>
         """,
         unsafe_allow_html=True
     )
+
+def make_fig_readable(fig):
+    """Ensures chart labels are always white for the dark glass container."""
+    fig.update_layout(
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(color="white", size=14),
+        xaxis=dict(gridcolor='rgba(255,255,255,0.1)', color="white"),
+        yaxis=dict(gridcolor='rgba(255,255,255,0.1)', color="white"),
+        title=dict(font=dict(color="white", size=22))
+    )
+    return fig
 
 # ---------------------------
 # MAIN APP
@@ -97,20 +122,20 @@ with st.sidebar:
 
 if bg_image:
     try:
-        # 1. Sync palette with image background
-        detected_theme = get_dominant_palette(bg_image)
+        # Detect accent color for the GRAPH ONLY
+        accent_color = get_dominant_color(bg_image)
         
-        # 2. Apply theme and background
         bg_image.seek(0)
         img_b64 = base64.b64encode(bg_image.getvalue()).decode("utf-8")
-        apply_dynamic_theme(img_b64, bg_image.type, detected_theme)
+        
+        # Apply styling - Text flips based on image, Sidebar stays dark
+        apply_final_styling(img_b64, bg_image.type, accent_color)
         
         if data_file:
-            # 3. Process and Plot
             df = pd.read_csv(data_file) if data_file.name.endswith('.csv') else pd.read_excel(data_file)
             
-            # Use High-Contrast Ribbon for Title
-            st.markdown(f'<div class="title-box"><h1 style="color:white;margin:0;">Data Narrative</h1></div>', unsafe_allow_html=True)
+            # Title Ribbon
+            st.markdown('<div class="title-box"><h1>Data Narrative</h1></div>', unsafe_allow_html=True)
             
             cols = df.columns
             if len(cols) >= 2:
@@ -119,24 +144,20 @@ if bg_image:
                     plot_df[col] = pd.to_numeric(plot_df[col], errors='coerce')
                 plot_df = plot_df.dropna(subset=[cols[0], cols[1]])
 
-                # 4. Plotly Graph Palette Matching
+                # Plotly Chart with synced accent color
                 fig = px.area(plot_df, x=cols[0], y=cols[1], title=f"Trend: {cols[1]}")
-                fig.update_layout(
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color="white"),
-                    xaxis=dict(gridcolor='rgba(255,255,255,0.1)', color="white"),
-                    yaxis=dict(gridcolor='rgba(255,255,255,0.1)', color="white")
-                )
+                fig = make_fig_readable(fig)
                 
-                # Chart now uses the EXACT color from the background
-                fig.update_traces(line_color=detected_theme, fillcolor=f"rgba{tuple(list(int(detected_theme.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)) + [0.3])}")
+                # Accents match the image palette automatically
+                fig.update_traces(
+                    line_color=accent_color, 
+                    fillcolor=f"rgba{tuple(list(int(accent_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)) + [0.3])}"
+                )
                 
                 st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                 
                 with st.expander("Explore Raw Data"):
                     st.dataframe(df)
-                    
     except Exception as e:
         st.error(f"Error: {e}")
 else:
