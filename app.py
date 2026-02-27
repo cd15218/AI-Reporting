@@ -21,17 +21,20 @@ def get_contrast_color(hex_color):
     """Determines if white or black text has better contrast against a hex color."""
     hex_color = hex_color.lstrip('#')
     r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    # Relative luminance formula for accessibility
     luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
     return "#000000" if luminance > 0.5 else "#FFFFFF"
 
 def apply_auto_scenery_style(b64_str, img_type, auto_color):
-    """Applies styling without the dark overlay."""
+    """Comprehensive CSS for isolated background and high-contrast UI."""
     contrast_text = get_contrast_color(auto_color)
+    # Define a shadow that flips based on text color (white glow for dark text, dark shadow for white text)
+    title_shadow = "rgba(255,255,255,0.8)" if contrast_text == "#000000" else "rgba(0,0,0,0.9)"
     
     st.markdown(
         f"""
         <style>
-        /* 1. Page Background (No Overlay) */
+        /* 1. Isolated Page Background (No Overlay) */
         [data-testid="stAppViewContainer"] {{
             background-image: url("data:{img_type};base64,{b64_str}");
             background-size: cover;
@@ -43,35 +46,38 @@ def apply_auto_scenery_style(b64_str, img_type, auto_color):
             background: transparent !important;
         }}
         
-        /* 2. Sidebar Isolation */
+        /* 2. Sidebar Isolation & Readability Fix */
         [data-testid="stSidebar"] {{
             background-color: {auto_color} !important;
             backdrop-filter: blur(20px);
             border-right: 1px solid rgba(255, 255, 255, 0.2);
         }}
         
-        [data-testid="stSidebar"] * {{
+        /* Force color on all sidebar text, labels, and file uploader buttons */
+        [data-testid="stSidebar"] *, 
+        [data-testid="stSidebar"] p, 
+        [data-testid="stSidebar"] label, 
+        [data-testid="stSidebar"] button p {{
             color: {contrast_text} !important;
             font-weight: 700 !important;
         }}
 
-        /* 3. Main Title: Sync with Auto Color */
+        /* 3. Main Page Title (Data Narrative) */
         .main h1 {{
             color: {auto_color} !important;
-            /* Heavy shadow to protect readability without the overlay */
-            text-shadow: 0px 0px 15px rgba(0,0,0,0.9), 2px 2px 5px rgba(0,0,0,1) !important;
+            text-shadow: 0px 0px 15px {title_shadow}, 2px 2px 5px rgba(0,0,0,1) !important;
             font-weight: 800 !important;
             font-size: 3.5rem !important;
         }}
         
-        /* General Page Text: White with Heavy Shadow */
+        /* 4. Global Text Readability (Main Page) */
         .main p, .main label, .main span, summary, .main h2, .main h3 {{
             color: white !important;
             text-shadow: 0px 0px 12px rgba(0,0,0,1), 2px 2px 4px rgba(0,0,0,1) !important;
             font-weight: 700 !important;
         }}
         
-        /* 4. Chart Glassmorphism (Slightly darker for contrast) */
+        /* 5. Chart Glassmorphism */
         [data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart) {{
             background: rgba(15, 23, 42, 0.85) !important; 
             backdrop-filter: blur(35px) !important;
@@ -80,7 +86,7 @@ def apply_auto_scenery_style(b64_str, img_type, auto_color):
             padding: 40px !important;
         }}
 
-        /* 5. Icons & Expanders */
+        /* 6. Icons & Expanders */
         svg {{ fill: white !important; }}
         [data-testid="stSidebar"] svg {{ fill: {contrast_text} !important; }}
 
@@ -95,7 +101,7 @@ def apply_auto_scenery_style(b64_str, img_type, auto_color):
     )
 
 def make_fig_readable(fig):
-    """Syncs Plotly with high-contrast text requirements."""
+    """Standardizes Plotly fonts for high-contrast visibility."""
     fig.update_layout(
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
@@ -131,19 +137,27 @@ with st.sidebar:
 
 if bg_image:
     try:
+        # Detect palette color
         auto_theme_color = get_dominant_color(bg_image)
+        
+        # Prepare background
         bg_image.seek(0)
         img_b64 = base64.b64encode(bg_image.getvalue()).decode("utf-8")
+        
+        # Apply styles with fixed button contrast
         apply_auto_scenery_style(img_b64, bg_image.type, auto_theme_color)
     except Exception as e:
-        st.error(f"Aesthetic Processing Error: {e}")
+        st.error(f"UI Enhancement Error: {e}")
 else:
     auto_theme_color = "#00F2FF"
     st.markdown("<style>.stApp {background: #0f172a;}</style>", unsafe_allow_html=True)
 
 if data_file:
     try:
+        # Load Data
         df = pd.read_csv(data_file) if data_file.name.endswith('.csv') else pd.read_excel(data_file)
+        
+        # Numeric processing for columns
         cols = df.columns
         if len(cols) >= 2:
             plot_df = df.copy()
@@ -153,7 +167,8 @@ if data_file:
 
             st.title("Data Narrative")
             
-            fig = px.area(plot_df, x=cols[0], y=cols[1], title=f"Trend Analysis: {cols[1]}")
+            # Area chart synced to background palette
+            fig = px.area(plot_df, x=cols[0], y=cols[1], title=f"Trend: {cols[1]}")
             fig.update_traces(
                 line_color=auto_theme_color, 
                 fillcolor=hex_to_rgba(auto_theme_color, 0.45), 
@@ -171,4 +186,4 @@ if data_file:
     except Exception as e:
         st.error(f"Data processing error: {e}")
 else:
-    st.info("Upload your background and dataset to begin.")
+    st.info("Upload your background imagery and data to begin.")
