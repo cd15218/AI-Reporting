@@ -21,7 +21,6 @@ def get_contrast_color(hex_color):
     """Determines if white or black text has better contrast against a hex color."""
     hex_color = hex_color.lstrip('#')
     r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-    # Relative luminance formula
     luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
     return "#000000" if luminance > 0.5 else "#FFFFFF"
 
@@ -32,7 +31,7 @@ def apply_auto_scenery_style(b64_str, img_type, auto_color):
     st.markdown(
         f"""
         <style>
-        /* 1. Main Page Background ONLY (isolated from sidebar) */
+        /* 1. Main Page Background ONLY */
         [data-testid="stAppViewContainer"] {{
             background: linear-gradient(rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0.45)), 
                         url("data:{img_type};base64,{b64_str}");
@@ -41,12 +40,11 @@ def apply_auto_scenery_style(b64_str, img_type, auto_color):
             background-position: center;
         }}
         
-        /* Ensure the main content area itself is transparent to see the background */
         [data-testid="stHeader"], [data-testid="stMain"] {{
             background: transparent !important;
         }}
         
-        /* 2. Sidebar: Now themed by image palette, but functionally isolated */
+        /* 2. Sidebar: Background color only, no image bleed */
         [data-testid="stSidebar"] {{
             background-color: {auto_color} !important;
             backdrop-filter: blur(20px);
@@ -58,14 +56,14 @@ def apply_auto_scenery_style(b64_str, img_type, auto_color):
             font-weight: 700 !important;
         }}
 
-        /* 3. Global Text Visibility (Main Page) */
+        /* 3. Global Text Visibility */
         .main *, .main p, .main label, .main span, summary {{
             color: white !important;
             text-shadow: 2px 2px 12px rgba(0,0,0,1) !important;
             font-weight: 700 !important;
         }}
         
-        /* 4. Chart Glassmorphism */
+        /* 4. Chart Glassmorphism Container */
         [data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart) {{
             background: rgba(15, 23, 42, 0.75) !important; 
             backdrop-filter: blur(30px) !important;
@@ -89,15 +87,16 @@ def apply_auto_scenery_style(b64_str, img_type, auto_color):
     )
 
 def make_fig_readable(fig):
-    """Standardizes Plotly fonts for high-contrast visibility."""
+    """Standardizes Plotly fonts for high-contrast visibility. Fixed dict error."""
     fig.update_layout(
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
-        title={{
-            'font': {{'color': "white", 'size': 26}},
+        title={
+            'text': fig.layout.title.text,
+            'font': {'color': 'white', 'size': 26},
             'x': 0.05,
             'xanchor': 'left'
-        }},
+        },
         font=dict(color="white", size=14),
         xaxis=dict(showgrid=False, tickfont=dict(color="white"), title_font=dict(color="white")),
         yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.15)', tickfont=dict(color="white")),
@@ -114,7 +113,7 @@ def hex_to_rgba(hex_color, opacity=0.3):
 # MAIN APP
 # ---------------------------
 
-st.set_page_config(page_title="Isolated Auto-Aesthetic", layout="wide")
+st.set_page_config(page_title="Data Narrative Studio", layout="wide")
 
 with st.sidebar:
     st.header("🎨 Design Studio")
@@ -131,7 +130,7 @@ if bg_image:
         bg_image.seek(0)
         img_b64 = base64.b64encode(bg_image.getvalue()).decode("utf-8")
         
-        # Apply styles with separation logic
+        # Apply styles
         apply_auto_scenery_style(img_b64, bg_image.type, auto_theme_color)
     except Exception as e:
         st.error(f"UI Enhancement Error: {e}")
@@ -141,7 +140,11 @@ else:
 
 if data_file:
     try:
-        df = pd.read_csv(data_file) if data_file.name.endswith('.csv') else pd.read_excel(data_file)
+        # File loading logic
+        if data_file.name.endswith('.csv'):
+            df = pd.read_csv(data_file)
+        else:
+            df = pd.read_excel(data_file)
         
         cols = df.columns
         if len(cols) >= 2:
@@ -152,6 +155,7 @@ if data_file:
 
             st.title("Data Narrative")
             
+            # Area chart
             fig = px.area(plot_df, x=cols[0], y=cols[1], title=f"Trend: {cols[1]}")
             fig.update_traces(
                 line_color=auto_theme_color, 
