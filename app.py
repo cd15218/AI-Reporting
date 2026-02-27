@@ -1,5 +1,4 @@
 import base64
-import os
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -9,6 +8,7 @@ import streamlit as st
 # ---------------------------
 
 def apply_scenery_style(b64_str, img_type):
+    """Injects CSS for fixed background and glassmorphism containers."""
     st.markdown(
         f"""
         <style>
@@ -16,21 +16,24 @@ def apply_scenery_style(b64_str, img_type):
             background-image: url("data:{img_type};base64,{b64_str}");
             background-size: cover;
             background-attachment: fixed;
+            background-position: center;
         }}
         
+        /* Glassmorphism container for chart blocks */
         [data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart) {{
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border-radius: 20px;
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border-radius: 24px;
             border: 1px solid rgba(255, 255, 255, 0.1);
-            padding: 20px;
-            margin-bottom: 20px;
+            padding: 30px;
+            margin-bottom: 25px;
         }}
 
-        h1, h2, h3, p, span {{
+        /* Typography styling for readability */
+        h1, h2, h3, p, span, label, .stMarkdown {{
             color: white !important;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            text-shadow: 2px 2px 5px rgba(0,0,0,0.7);
         }}
         </style>
         """,
@@ -38,14 +41,23 @@ def apply_scenery_style(b64_str, img_type):
     )
 
 def make_fig_transparent(fig):
+    """Removes standard backgrounds so the scenery shows through."""
     fig.update_layout(
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
-        xaxis=dict(showgrid=False, zeroline=False),
-        yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)', zeroline=False),
-        font=dict(family="Inter, sans-serif", color="white", size=14)
+        xaxis=dict(showgrid=False, zeroline=False, color="white"),
+        yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)', zeroline=False, color="white"),
     )
     return fig
+
+def hex_to_rgba(hex_color, opacity=0.3):
+    """Properly converts hex to an RGBA string Plotly can read."""
+    hex_color = hex_color.lstrip('#')
+    # Convert hex pairs to decimal integers
+    r = int(hex_color[0:2], 16)
+    g = int(hex_color[2:4], 16)
+    b = int(hex_color[4:6], 16)
+    return f"rgba({r}, {g}, {b}, {opacity})"
 
 # ---------------------------
 # MAIN APP
@@ -53,48 +65,20 @@ def make_fig_transparent(fig):
 
 st.set_page_config(page_title="Aesthetic Data Scenery", layout="wide")
 
+# 1. Sidebar for Aesthetic Controls
 with st.sidebar:
     st.header("🎨 Design Studio")
     bg_image = st.file_uploader("Upload Scenery Image", type=["png", "jpg", "jpeg"])
     accent_color = st.color_picker("Pick Data Accent Color", "#00F2FF")
+    
     st.markdown("---")
     data_file = st.file_uploader("Upload Dataset", type=["csv", "xlsx"])
 
-# Handle Background
+# 2. Handle Background Image
 if bg_image:
-    b64 = base64.b64encode(bg_image.getvalue()).decode("utf-8")
-    apply_scenery_style(b64, bg_image.type)
+    img_b64 = base64.b64encode(bg_image.getvalue()).decode("utf-8")
+    apply_scenery_style(img_b64, bg_image.type)
 else:
-    st.markdown("<style>.stApp {background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%);}</style>", unsafe_allow_html=True)
-
-# Data Handling
-if data_file:
-    try:
-        # Check file extension to determine loading method
-        if data_file.name.endswith('.csv'):
-            df = pd.read_csv(data_file)
-        else:
-            df = pd.read_excel(data_file)
-            
-        st.title("Data Narrative")
-        
-        if df.shape[1] < 2:
-            st.warning("Please upload a dataset with at least two columns for visualization.")
-        else:
-            # Aesthetic Area Chart
-            cols = df.columns
-            fig = px.area(df, x=cols[0], y=cols[1], title="Thematic Trend Analysis")
-            
-            # Formatting
-            fig.update_traces(
-                line_color=accent_color,
-                fillcolor=accent_color.replace("#", "rgba(") + ",0.2)"
-            )
-            fig = make_fig_transparent(fig)
-            
-            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-            
-    except Exception as e:
-        st.error(f"Could not process file: {e}")
-else:
-    st.info("Upload a background image and a dataset to see the magic.")
+    # Default dark gradient if no image is uploaded
+    st.markdown(
+        "<style>.stApp {background: linear-gradient(135deg, #0f172a 0
