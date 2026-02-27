@@ -15,65 +15,62 @@ def get_contrast_color(hex_color):
     return "#000000" if luminance > 0.5 else "#FFFFFF"
 
 def apply_scenery_style(b64_str, img_type, accent_color):
-    """Injects dynamic CSS targeting all text elements, including expanders."""
+    """Comprehensive CSS targeting all UI elements for 100% visibility."""
     contrast_text = get_contrast_color(accent_color)
     
     st.markdown(
         f"""
         <style>
+        /* 1. Background with Dark Tint Overlay */
         .stApp {{
-            background-image: url("data:{img_type};base64,{b64_str}");
+            background: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)), 
+                        url("data:{img_type};base64,{b64_str}");
             background-size: cover;
             background-attachment: fixed;
             background-position: center;
         }}
         
-        /* Sidebar Contrast */
+        /* 2. Sidebar Overhaul */
         [data-testid="stSidebar"] {{
-            background-color: {accent_color}e6 !important;
-            backdrop-filter: blur(15px);
+            background-color: {accent_color} !important;
+            backdrop-filter: blur(20px);
         }}
-        [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, 
-        [data-testid="stSidebar"] p, [data-testid="stSidebar"] label,
-        [data-testid="stSidebar"] .stMarkdown {{
+        /* Force ALL sidebar text and icons to contrast color */
+        [data-testid="stSidebar"] *, [data-testid="stSidebar"] p, [data-testid="stSidebar"] label {{
             color: {contrast_text} !important;
             font-weight: 700 !important;
         }}
 
-        /* Glassmorphism Container for Charts */
-        [data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart) {{
-            background: rgba(15, 23, 42, 0.75); 
-            backdrop-filter: blur(30px);
-            border-radius: 28px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            padding: 40px;
-        }}
-
-        /* FIX: Target Expander Label and Icon */
-        .stDetails summary {{
+        /* 3. Global Text Override for Main Area */
+        /* Targets headers, paragraphs, labels, and expanders */
+        .main *, .main p, .main label, .main span, summary {{
             color: white !important;
-            font-weight: 700 !important;
-            font-size: 1.1rem !important;
-            text-shadow: 2px 2px 8px rgba(0,0,0,1) !important;
+            text-shadow: 2px 2px 10px rgba(0,0,0,1) !important;
         }}
         
-        /* FIX: Expander Icon (the arrow) */
-        .stDetails summary svg {{
+        /* 4. Glassmorphism Chart Container */
+        [data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart) {{
+            background: rgba(15, 23, 42, 0.8) !important; 
+            backdrop-filter: blur(30px) !important;
+            border-radius: 28px !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            padding: 40px !important;
+        }}
+
+        /* 5. Icon Visibility (Arrows, Chevrons) */
+        svg {{
             fill: white !important;
         }}
-
-        /* Darken the inside of the expander for data visibility */
-        .stDetails {{
-            background: rgba(0, 0, 0, 0.4) !important;
-            border-radius: 15px !important;
-            border: none !important;
+        [data-testid="stSidebar"] svg {{
+            fill: {contrast_text} !important;
         }}
 
-        /* General Main Text */
-        .main h1, .main h2, .main h3, .main p, .main span, .main label {{
-            color: white !important;
-            text-shadow: 3px 3px 12px rgba(0,0,0,1) !important;
-            font-weight: 700 !important;
+        /* 6. Expander Box Styling */
+        details {{
+            background: rgba(0, 0, 0, 0.5) !important;
+            border-radius: 12px !important;
+            padding: 10px !important;
+            margin-bottom: 10px !important;
         }}
         </style>
         """,
@@ -81,7 +78,6 @@ def apply_scenery_style(b64_str, img_type, accent_color):
     )
 
 def make_fig_readable(fig):
-    """Syncs chart fonts with the high-contrast dark theme."""
     fig.update_layout(
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
@@ -133,7 +129,6 @@ if data_file:
         
         st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
         
-        # This is the section we targeted with the CSS fix
         with st.expander("Explore Raw Data"):
             st.dataframe(df)
             
