@@ -1,160 +1,94 @@
-import base64
-import pandas as pd
+import dash
+from dash import dcc, html, Input, Output, State
 import plotly.express as px
-import streamlit as st
-from PIL import Image
+import pandas as pd
+import base64
 import io
+from PIL import Image
 
-# ---------------------------
-# COLOR & PALETTE LOGIC
-# ---------------------------
+# Initialize the app
+app = dash.Dash(__name__)
 
-def get_dominant_color(uploaded_image):
-    """Extracts the dominant color for the graph/chart accents ONLY."""
-    uploaded_image.seek(0)
-    img = Image.open(uploaded_image).convert('RGB')
-    img = img.resize((1, 1), resample=Image.Resampling.BILINEAR)
-    dominant_color = img.getpixel((0, 0))
-    return '#{:02x}{:02x}{:02x}'.format(*dominant_color)
-
-def get_readability_color(hex_color):
-    """Determines if the main page text (Data Narrative) should be Black or White."""
-    hex_color = hex_color.lstrip('#')
-    r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-    # Standard accessibility luminance formula
-    luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
-    return "#000000" if luminance > 0.5 else "#FFFFFF"
-
-def apply_final_styling(b64_str, img_type, auto_accent):
-    """Hard-locks the sidebar and dynamically flips main page text color."""
-    # This color ONLY flips the main page text (H1, labels, etc.)
-    main_text_color = get_readability_color(auto_accent)
+# --- STYLING (The "Glass" Look) ---
+app.layout = html.Div([
+    # This div holds the background image
+    html.Div(id='bg-container', style={
+        'position': 'fixed', 'top': 0, 'left': 0, 'width': '100vw', 'height': '100vh',
+        'zIndex': -1, 'backgroundSize': 'cover', 'backgroundPosition': 'center'
+    }),
     
-    st.markdown(
-        f"""
-        <style>
-        /* 1. LOCK SIDEBAR THEME - Hard-coded, ignores background */
-        [data-testid="stSidebar"] {{
-            background-color: #0E1117 !important;
-            background-image: none !important;
-        }}
-        
-        /* Force Sidebar Text & 'Browse Files' to ALWAYS be white */
-        [data-testid="stSidebar"] *, 
-        [data-testid="stSidebar"] label, 
-        [data-testid="stSidebar"] p,
-        [data-testid="stSidebar"] small {{
-            color: #FFFFFF !important;
-            font-weight: 700 !important;
-            text-shadow: none !important;
-        }}
-        
-        /* Specific fix for the 'Browse files' button text visibility */
-        [data-testid="stSidebar"] button div div small {{
-            color: #FFFFFF !important;
-            opacity: 1 !important;
-        }}
+    # Sidebar
+    html.Div([
+        html.H2("🎨 Design Studio", style={'color': 'white'}),
+        dcc.Upload(id='upload-image', children=html.Div(['Upload Scenery'])),
+        html.Hr(),
+        dcc.Upload(id='upload-data', children=html.Div(['Upload Dataset'])),
+    ], id='sidebar', style={
+        'width': '300px', 'height': '100vh', 'position': 'fixed', 
+        'backgroundColor': '#0E1117', 'padding': '20px', 'color': 'white'
+    }),
 
-        /* 2. MAIN PAGE BACKGROUND - Isolated from sidebar */
-        [data-testid="stAppViewContainer"] {{
-            background-image: url("data:{img_type};base64,{b64_str}");
-            background-size: cover;
-            background-attachment: fixed;
-            background-position: center;
-        }}
+    # Main Content Area
+    html.Div([
+        html.Div(id='title-container', children=[
+            html.H1("Data Narrative", id='main-title')
+        ]),
         
-        [data-testid="stHeader"], [data-testid="stMain"] {{
-            background: transparent !important;
-        }}
+        # The Glass Pane for the Graph
+        html.Div(id='graph-pane', children=[
+            dcc.Graph(id='main-graph', config={'displayModeBar': False})
+        ])
+    ], style={'marginLeft': '350px', 'padding': '50px'})
+])
 
-        /* 3. MAIN PAGE TEXT - Flips between Black/White (No Shadows) */
-        h1, h2, h3, .main p, .main label, .main span, summary {{
-            color: {main_text_color} !important;
-            text-shadow: none !important;
-            font-weight: 700 !important;
-        }}
+# --- LOGIC: Color Extraction & Theme Sync ---
+@app.callback(
+    [Output('bg-container', 'style'),
+     Output('main-title', 'style'),
+     Output('main-graph', 'figure')],
+    [Input('upload-image', 'contents'),
+     Input('upload-data', 'contents')],
+    [State('upload-image', 'filename')]
+)
+def update_app(image_contents, data_contents, img_name):
+    # Default fallback values
+    bg_style = {'backgroundColor': '#0f172a'}
+    title_style = {'color': 'white'}
+    accent_color = "#00F2FF"
+    
+    if image_contents:
+        # 1. Process Image and Extract Color
+        content_type, content_string = image_contents.split(',')
+        decoded = base64.b64decode(content_string)
+        img = Image.open(io.BytesIO(decoded)).convert('RGB')
         
-        .title-box {{
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(15px);
-            padding: 10px 30px;
-            border-radius: 12px;
-            display: inline-block;
-            margin-bottom: 25px;
-        }}
+        # Get dominant color (Average of 1x1 resize)
+        small_img = img.resize((1, 1), Image.Resampling.BILINEAR)
+        r, g, b = small_img.getpixel((0, 0))
+        accent_color = f'rgb({r}, {g}, {b})'
+        
+        # 2. Determine Text Color (Black or White)
+        luminance = (0.2126*r + 0.7152*g + 0.0722*b) / 255
+        text_color = "black" if luminance > 0.5 else "white"
+        
+        bg_style = {
+            'backgroundImage': f'url({image_contents})',
+            'backgroundSize': 'cover'
+        }
+        title_style = {'color': text_color, 'fontSize': '4rem', 'fontWeight': 'bold'}
 
-        /* 4. Chart Glassmorphism Container */
-        [data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart) {{
-            background: rgba(15, 23, 42, 0.85) !important; 
-            backdrop-filter: blur(35px) !important;
-            border-radius: 24px !important;
-            padding: 40px !important;
-            border: 1px solid rgba(255, 255, 255, 0.1) !important;
-        }}
-        
-        /* SVG Icon Visibility Sync */
-        svg {{ fill: {main_text_color} !important; }}
-        [data-testid="stSidebar"] svg {{ fill: #FFFFFF !important; }}
-        </style>
-        """,
-        unsafe_allow_html=True
+    # 3. Create Graph
+    fig = px.area(title="Upload data to see trend")
+    if data_contents:
+        # (Insert your pandas reading logic here)
+        fig.update_traces(line_color=accent_color, fillcolor=accent_color)
+    
+    fig.update_layout(
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(color="white")
     )
 
-# ---------------------------
-# MAIN APP
-# ---------------------------
+    return bg_style, title_style, fig
 
-st.set_page_config(page_title="Data Narrative Studio", layout="wide")
-
-with st.sidebar:
-    st.markdown("### 🎨 Design Studio")
-    bg_image = st.file_uploader("Upload Scenery Image", type=["png", "jpg", "jpeg"])
-    st.divider()
-    data_file = st.file_uploader("Upload Dataset", type=["csv", "xlsx"])
-
-if bg_image:
-    try:
-        # 1. Detect color for the GRAPH ONLY
-        accent_color = get_dominant_color(bg_image)
-        
-        bg_image.seek(0)
-        img_b64 = base64.b64encode(bg_image.getvalue()).decode("utf-8")
-        
-        # 2. Apply styles
-        apply_final_styling(img_b64, bg_image.type, accent_color)
-        
-        if data_file:
-            df = pd.read_csv(data_file) if data_file.name.endswith('.csv') else pd.read_excel(data_file)
-            
-            # Title Area
-            st.markdown('<div class="title-box"><h1>Data Narrative</h1></div>', unsafe_allow_html=True)
-            
-            cols = df.columns
-            if len(cols) >= 2:
-                plot_df = df.copy()
-                for col in cols[:2]:
-                    plot_df[col] = pd.to_numeric(plot_df[col], errors='coerce')
-                plot_df = plot_df.dropna(subset=[cols[0], cols[1]])
-
-                # 3. Chart accents match the image palette
-                fig = px.area(plot_df, x=cols[0], y=cols[1], title=f"Trend Analysis")
-                fig.update_layout(
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color="white"),
-                    xaxis=dict(gridcolor='rgba(255,255,255,0.1)', color="white"),
-                    yaxis=dict(gridcolor='rgba(255,255,255,0.1)', color="white")
-                )
-                fig.update_traces(
-                    line_color=accent_color, 
-                    fillcolor=f"rgba{tuple(list(int(accent_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)) + [0.3])}"
-                )
-                
-                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-                
-                with st.expander("Explore Raw Data"):
-                    st.dataframe(df)
-    except Exception as e:
-        st.error(f"Error: {e}")
-else:
-    st.info("Upload imagery and data in the Design Studio to begin.")
+if __name__ == '__main__':
+    app.run_server(debug=True)
