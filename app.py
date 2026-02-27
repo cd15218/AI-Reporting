@@ -98,8 +98,19 @@ if data_file:
         
         if len(df.columns) >= 2:
             cols = df.columns
-            # Use the first two columns for a demonstration plot
-            fig = px.area(df, x=cols[0], y=cols[1], title=f"Trend Analysis: {cols[1]}")
+            
+            # --- FIX: Ensure columns are numeric for plotting ---
+            # We convert columns to numeric, setting errors='coerce' to turn strings into NaN
+            plot_df = df.copy()
+            plot_df[cols[0]] = pd.to_numeric(plot_df[cols[0]], errors='coerce')
+            plot_df[cols[1]] = pd.to_numeric(plot_df[cols[1]], errors='coerce')
+            
+            # Drop rows with NaN values created by the conversion
+            plot_df = plot_df.dropna(subset=[cols[0], cols[1]])
+            # ----------------------------------------------------
+
+            # Create the chart using the cleaned dataframe
+            fig = px.area(plot_df, x=cols[0], y=cols[1], title=f"Trend Analysis: {cols[1]}")
             
             # Apply our corrected accent styling
             fig.update_traces(
@@ -120,12 +131,12 @@ if data_file:
             
             # Additional detail container
             with st.expander("Explore Raw Data"):
-                st.dataframe(df.style.highlight_max(axis=0))
+                # Use the original df here so you can still see the text rows
+                st.dataframe(df)
         else:
             st.warning("Your dataset needs at least two columns for an area chart.")
             
     except Exception as e:
         st.error(f"Could not process file: {e}")
-
 else:
     st.info("Step 1: Upload a background. Step 2: Upload your data to see the magic.")
