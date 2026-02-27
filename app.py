@@ -81,4 +81,51 @@ if bg_image:
 else:
     # Default dark gradient if no image is uploaded
     st.markdown(
-        "<style>.stApp {background: linear-gradient(135deg, #0f172a 0
+        "<style>.stApp {background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);}</style>", 
+        unsafe_allow_html=True
+    )
+
+# 3. Data Narrative Logic
+if data_file:
+    try:
+        # Support both CSV and Excel
+        if data_file.name.endswith('.csv'):
+            df = pd.read_csv(data_file)
+        else:
+            df = pd.read_excel(data_file)
+            
+        st.title("Data Narrative")
+        
+        if len(df.columns) >= 2:
+            cols = df.columns
+            # Use the first two columns for a demonstration plot
+            fig = px.area(df, x=cols[0], y=cols[1], title=f"Trend Analysis: {cols[1]}")
+            
+            # Apply our corrected accent styling
+            fig.update_traces(
+                line_color=accent_color,
+                fillcolor=hex_to_rgba(accent_color, 0.3),
+                line=dict(width=3)
+            )
+            
+            # Clean up fonts and layout
+            fig = make_fig_transparent(fig)
+            fig.update_layout(
+                font=dict(family="Arial, sans-serif", color="white", size=14),
+                margin=dict(l=50, r=50, t=80, b=50)
+            )
+            
+            # Display the aesthetic chart
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+            
+            # Additional detail container
+            with st.expander("Explore Raw Data"):
+                st.dataframe(df.style.highlight_max(axis=0))
+        else:
+            st.warning("Your dataset needs at least two columns for an area chart.")
+            
+    except Exception as e:
+        st.error(f"Could not process file: {e}")
+
+else:
+    st.info("Step 1: Upload a background. Step 2: Upload your data to see the magic.")
