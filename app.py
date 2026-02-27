@@ -21,78 +21,69 @@ def get_contrast_color(hex_color):
     """Determines if white or black text has better contrast against a hex color."""
     hex_color = hex_color.lstrip('#')
     r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-    # Relative luminance formula for accessibility
     luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
     return "#000000" if luminance > 0.5 else "#FFFFFF"
 
 def apply_auto_scenery_style(b64_str, img_type, auto_color):
-    """Comprehensive CSS for isolated background and high-contrast UI."""
+    """Redefines Streamlit's core variables and forces global text visibility."""
     contrast_text = get_contrast_color(auto_color)
-    # Define a shadow that flips based on text color (white glow for dark text, dark shadow for white text)
-    title_shadow = "rgba(255,255,255,0.8)" if contrast_text == "#000000" else "rgba(0,0,0,0.9)"
     
     st.markdown(
         f"""
         <style>
-        /* 1. Isolated Page Background (No Overlay) */
-        [data-testid="stAppViewContainer"] {{
+        /* 1. Global Theme Variable Overrides */
+        :root {{
+            --primary-color: {auto_color};
+            --background-color: transparent;
+            --secondary-background-color: {auto_color};
+            --text-color: white;
+        }}
+
+        /* 2. Page Background */
+        .stApp {{
             background-image: url("data:{img_type};base64,{b64_str}");
             background-size: cover;
             background-attachment: fixed;
             background-position: center;
         }}
-        
-        [data-testid="stHeader"], [data-testid="stMain"] {{
-            background: transparent !important;
-        }}
-        
-        /* 2. Sidebar Isolation & Readability Fix */
+
+        /* 3. Force Sidebar Contrast (The Browse Files Fix) */
         [data-testid="stSidebar"] {{
             background-color: {auto_color} !important;
-            backdrop-filter: blur(20px);
-            border-right: 1px solid rgba(255, 255, 255, 0.2);
         }}
         
-        /* Force color on all sidebar text, labels, and file uploader buttons */
+        /* This targets EVERY piece of text and button label in the sidebar */
         [data-testid="stSidebar"] *, 
-        [data-testid="stSidebar"] p, 
-        [data-testid="stSidebar"] label, 
-        [data-testid="stSidebar"] button p {{
+        [data-testid="stSidebar"] span, 
+        [data-testid="stSidebar"] button {{
             color: {contrast_text} !important;
-            font-weight: 700 !important;
+            fill: {contrast_text} !important;
         }}
 
-        /* 3. Main Page Title (Data Narrative) */
-        .main h1 {{
-            color: {auto_color} !important;
-            text-shadow: 0px 0px 15px {title_shadow}, 2px 2px 5px rgba(0,0,0,1) !important;
-            font-weight: 800 !important;
-            font-size: 3.5rem !important;
-        }}
-        
-        /* 4. Global Text Readability (Main Page) */
-        .main p, .main label, .main span, summary, .main h2, .main h3 {{
+        /* 4. Force "Data Narrative" and Main Text visibility */
+        h1, h2, h3, p, label, .stMarkdown, summary {{
             color: white !important;
-            text-shadow: 0px 0px 12px rgba(0,0,0,1), 2px 2px 4px rgba(0,0,0,1) !important;
-            font-weight: 700 !important;
+            text-shadow: 2px 2px 15px rgba(0,0,0,1), 0px 0px 5px rgba(0,0,0,1) !important;
         }}
         
-        /* 5. Chart Glassmorphism */
-        [data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart) {{
-            background: rgba(15, 23, 42, 0.85) !important; 
-            backdrop-filter: blur(35px) !important;
-            border-radius: 28px !important;
-            border: 1px solid rgba(255, 255, 255, 0.2) !important;
-            padding: 40px !important;
+        /* Specific Fix for the Title Color matching the accent */
+        h1 {{
+            color: {auto_color} !important;
         }}
 
-        /* 6. Icons & Expanders */
-        svg {{ fill: white !important; }}
-        [data-testid="stSidebar"] svg {{ fill: {contrast_text} !important; }}
+        /* 5. Glassmorphism Chart Container */
+        [data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart) {{
+            background: rgba(15, 23, 42, 0.8) !important; 
+            backdrop-filter: blur(30px) !important;
+            border-radius: 24px !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            padding: 30px !important;
+        }}
 
+        /* 6. Expander Styling */
         details {{
             background: rgba(0, 0, 0, 0.6) !important;
-            border-radius: 12px !important;
+            border-radius: 10px !important;
             padding: 10px !important;
         }}
         </style>
@@ -101,20 +92,13 @@ def apply_auto_scenery_style(b64_str, img_type, auto_color):
     )
 
 def make_fig_readable(fig):
-    """Standardizes Plotly fonts for high-contrast visibility."""
     fig.update_layout(
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
-        title={
-            'text': fig.layout.title.text,
-            'font': {'color': 'white', 'size': 26},
-            'x': 0.05,
-            'xanchor': 'left'
-        },
+        title={'font': {'color': 'white', 'size': 26}, 'x': 0.05},
         font=dict(color="white", size=14),
-        xaxis=dict(showgrid=False, tickfont=dict(color="white"), title_font=dict(color="white")),
+        xaxis=dict(showgrid=False, tickfont=dict(color="white")),
         yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.2)', tickfont=dict(color="white")),
-        margin=dict(t=100, b=50)
     )
     return fig
 
@@ -144,7 +128,7 @@ if bg_image:
         bg_image.seek(0)
         img_b64 = base64.b64encode(bg_image.getvalue()).decode("utf-8")
         
-        # Apply styles with fixed button contrast
+        # Apply styles
         apply_auto_scenery_style(img_b64, bg_image.type, auto_theme_color)
     except Exception as e:
         st.error(f"UI Enhancement Error: {e}")
@@ -154,10 +138,8 @@ else:
 
 if data_file:
     try:
-        # Load Data
         df = pd.read_csv(data_file) if data_file.name.endswith('.csv') else pd.read_excel(data_file)
         
-        # Numeric processing for columns
         cols = df.columns
         if len(cols) >= 2:
             plot_df = df.copy()
@@ -167,8 +149,7 @@ if data_file:
 
             st.title("Data Narrative")
             
-            # Area chart synced to background palette
-            fig = px.area(plot_df, x=cols[0], y=cols[1], title=f"Trend: {cols[1]}")
+            fig = px.area(plot_df, x=cols[0], y=cols[1], title=f"Trend Analysis: {cols[1]}")
             fig.update_traces(
                 line_color=auto_theme_color, 
                 fillcolor=hex_to_rgba(auto_theme_color, 0.45), 
@@ -186,4 +167,4 @@ if data_file:
     except Exception as e:
         st.error(f"Data processing error: {e}")
 else:
-    st.info("Upload your background imagery and data to begin.")
+    st.info("Upload your background and dataset to begin.")
