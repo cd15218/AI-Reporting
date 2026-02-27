@@ -10,7 +10,7 @@ import io
 # ---------------------------
 
 def get_dominant_color(uploaded_image):
-    """Extracts the dominant color for the graph accent ONLY."""
+    """Extracts the dominant color for the graph/chart accents ONLY."""
     uploaded_image.seek(0)
     img = Image.open(uploaded_image).convert('RGB')
     img = img.resize((1, 1), resample=Image.Resampling.BILINEAR)
@@ -18,7 +18,7 @@ def get_dominant_color(uploaded_image):
     return '#{:02x}{:02x}{:02x}'.format(*dominant_color)
 
 def get_readability_color(hex_color):
-    """Determines if the main page text (H1, etc.) should be Black or White."""
+    """Determines if the main page text (Data Narrative) should be Black or White."""
     hex_color = hex_color.lstrip('#')
     r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
     # Standard accessibility luminance formula
@@ -26,20 +26,36 @@ def get_readability_color(hex_color):
     return "#000000" if luminance > 0.5 else "#FFFFFF"
 
 def apply_final_styling(b64_str, img_type, auto_accent):
-    """Applies isolated sidebar styling and dynamic main page text with NO shadows."""
-    # Main page text color flips based on the image brightness
+    """Hard-locks the sidebar and dynamically flips main page text color."""
+    # This color ONLY flips the main page text (H1, labels, etc.)
     main_text_color = get_readability_color(auto_accent)
     
     st.markdown(
         f"""
         <style>
-        /* 1. Global Theme Redefinition for Sidebar Widgets */
-        :root {{
-            --primary-color: {auto_accent};
-            --secondary-background-color: #262730;
+        /* 1. LOCK SIDEBAR THEME - Hard-coded, ignores background */
+        [data-testid="stSidebar"] {{
+            background-color: #0E1117 !important;
+            background-image: none !important;
+        }}
+        
+        /* Force Sidebar Text & 'Browse Files' to ALWAYS be white */
+        [data-testid="stSidebar"] *, 
+        [data-testid="stSidebar"] label, 
+        [data-testid="stSidebar"] p,
+        [data-testid="stSidebar"] small {{
+            color: #FFFFFF !important;
+            font-weight: 700 !important;
+            text-shadow: none !important;
+        }}
+        
+        /* Specific fix for the 'Browse files' button text visibility */
+        [data-testid="stSidebar"] button div div small {{
+            color: #FFFFFF !important;
+            opacity: 1 !important;
         }}
 
-        /* 2. Main Page Background ONLY */
+        /* 2. MAIN PAGE BACKGROUND - Isolated from sidebar */
         [data-testid="stAppViewContainer"] {{
             background-image: url("data:{img_type};base64,{b64_str}");
             background-size: cover;
@@ -50,28 +66,14 @@ def apply_final_styling(b64_str, img_type, auto_accent):
         [data-testid="stHeader"], [data-testid="stMain"] {{
             background: transparent !important;
         }}
-        
-        /* 3. Sidebar: LOCKED DARK THEME (The 'Browse Files' Fix) */
-        [data-testid="stSidebar"] {{
-            background-color: #0E1117 !important;
-            background-image: none !important;
-        }}
-        
-        /* Force EVERYTHING in the sidebar to be White and Bold */
-        [data-testid="stSidebar"] * {{
-            color: #FFFFFF !important;
-            font-weight: 700 !important;
+
+        /* 3. MAIN PAGE TEXT - Flips between Black/White (No Shadows) */
+        h1, h2, h3, .main p, .main label, .main span, summary {{
+            color: {main_text_color} !important;
             text-shadow: none !important;
+            font-weight: 700 !important;
         }}
-
-        /* Targeting the internal Streamlit file uploader 'Browse files' button text specifically */
-        [data-testid="stSidebar"] button p, 
-        [data-testid="stSidebar"] button div div small {{
-            color: #FFFFFF !important;
-            opacity: 1 !important;
-        }}
-
-        /* 4. Main Page Text: Automatic Flip (Black/White, NO shadows) */
+        
         .title-box {{
             background: rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(15px);
@@ -80,14 +82,8 @@ def apply_final_styling(b64_str, img_type, auto_accent):
             display: inline-block;
             margin-bottom: 25px;
         }}
-        
-        h1, h2, h3, .main p, .main label, .main span, summary {{
-            color: {main_text_color} !important;
-            text-shadow: none !important;
-            font-weight: 700 !important;
-        }}
 
-        /* 5. Chart Glassmorphism Container */
+        /* 4. Chart Glassmorphism Container */
         [data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart) {{
             background: rgba(15, 23, 42, 0.85) !important; 
             backdrop-filter: blur(35px) !important;
@@ -96,25 +92,13 @@ def apply_final_styling(b64_str, img_type, auto_accent):
             border: 1px solid rgba(255, 255, 255, 0.1) !important;
         }}
         
-        /* Icon Visibility Sync */
+        /* SVG Icon Visibility Sync */
         svg {{ fill: {main_text_color} !important; }}
         [data-testid="stSidebar"] svg {{ fill: #FFFFFF !important; }}
         </style>
         """,
         unsafe_allow_html=True
     )
-
-def make_fig_readable(fig):
-    """Ensures chart labels remain white for the dark glass container."""
-    fig.update_layout(
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        font=dict(color="white", size=14),
-        xaxis=dict(gridcolor='rgba(255,255,255,0.1)', color="white"),
-        yaxis=dict(gridcolor='rgba(255,255,255,0.1)', color="white"),
-        title=dict(font=dict(color="white", size=22))
-    )
-    return fig
 
 # ---------------------------
 # MAIN APP
@@ -130,20 +114,19 @@ with st.sidebar:
 
 if bg_image:
     try:
-        # Detect accent color for the GRAPH ONLY
+        # 1. Detect color for the GRAPH ONLY
         accent_color = get_dominant_color(bg_image)
         
         bg_image.seek(0)
         img_b64 = base64.b64encode(bg_image.getvalue()).decode("utf-8")
         
-        # Apply styling: Sidebar stays dark, Main Text flips based on brightness
+        # 2. Apply styles
         apply_final_styling(img_b64, bg_image.type, accent_color)
         
         if data_file:
-            # Load Data
             df = pd.read_csv(data_file) if data_file.name.endswith('.csv') else pd.read_excel(data_file)
             
-            # Title Ribbon
+            # Title Area
             st.markdown('<div class="title-box"><h1>Data Narrative</h1></div>', unsafe_allow_html=True)
             
             cols = df.columns
@@ -153,11 +136,15 @@ if bg_image:
                     plot_df[col] = pd.to_numeric(plot_df[col], errors='coerce')
                 plot_df = plot_df.dropna(subset=[cols[0], cols[1]])
 
-                # Plotly Chart with synced accent color
-                fig = px.area(plot_df, x=cols[0], y=cols[1], title=f"Trend: {cols[1]}")
-                fig = make_fig_readable(fig)
-                
-                # Chart accents match image palette automatically
+                # 3. Chart accents match the image palette
+                fig = px.area(plot_df, x=cols[0], y=cols[1], title=f"Trend Analysis")
+                fig.update_layout(
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color="white"),
+                    xaxis=dict(gridcolor='rgba(255,255,255,0.1)', color="white"),
+                    yaxis=dict(gridcolor='rgba(255,255,255,0.1)', color="white")
+                )
                 fig.update_traces(
                     line_color=accent_color, 
                     fillcolor=f"rgba{tuple(list(int(accent_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)) + [0.3])}"
@@ -170,6 +157,4 @@ if bg_image:
     except Exception as e:
         st.error(f"Error: {e}")
 else:
-    # Default State
-    auto_theme_color = "#00F2FF"
-    st.markdown("<style>.stApp {background: #0f172a;}</style>", unsafe_allow_html=True)
+    st.info("Upload imagery and data in the Design Studio to begin.")
